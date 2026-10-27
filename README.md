@@ -1,11 +1,24 @@
 # AI OMNIVERSE
 
-A polished Android AI model directory and chat-ready shell. Each model card shows what the model is best at, its strengths, and a practical use label.
+A polished Android AI model explorer. Each model card labels its practical strengths, including coding, reasoning, writing, local/on-device use, research, image generation, and audio transcription.
 
-## Build an APK
+## Download the Android app
 
-GitHub Actions builds a debug APK on each push. Open **Actions**, select **Build Android APK**, then download the `AI-OMNIVERSE-debug-apk` artifact from a successful run.
+After the GitHub Actions build succeeds, download the installable debug APK from:
+
+- [Latest APK release](https://github.com/eyerobalex06-arch/Aiultimate/releases/tag/latest-build)
+- [Build workflow and logs](https://github.com/eyerobalex06-arch/Aiultimate/actions/workflows/android.yml)
+
+Every push to `main` triggers a build. A successful run uploads the APK and updates the latest-build release.
+
+## Current features
+
+- Dark, purple, mobile-friendly interface
+- Search model names, skills, and tasks
+- Filter by Coding, Reasoning, Fast, Images, Audio, Local, and Research
+- Model detail panels with strengths, modality, and notes
+- Android launcher icon
 
 ## Important
 
-The current release is a model-discovery UI. Live chat requires provider API credentials and is not represented as connected until implemented. Model availability and strengths can change; labels are practical guidance, not universal benchmark rankings.
+This initial build is a **model discovery directory**, not a live multi-provider AI chat client yet. It does not claim that listed models are connected or running in the app. Live chat requires adding provider integrations and securely configuring access. Model strengths are practical guidance, not a universal benchmark ranking, and vary by model version.
