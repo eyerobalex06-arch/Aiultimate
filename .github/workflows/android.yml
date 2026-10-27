@@ -4,7 +4,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   build:
@@ -34,3 +34,17 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish latest installable APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          target_commitish: ${{ github.sha }}
+          name: AI OMNIVERSE Latest Build
+          body: |
+            Automatically built debug APK for testing on Android.
+
+            This build is not a Play Store release. The app currently provides a searchable model directory and strength labels; live AI chat providers are not connected yet.
+          files: app/build/outputs/apk/debug/app-debug.apk
+          update_tag: true
+          make_latest: true
