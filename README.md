@@ -1,26 +1,48 @@
 # AI OMNIVERSE
 
-AI OMNIVERSE is an Android app for exploring AI model families and opening a live hosted AI chat experience from one interface.
+AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 
 ## Download the APK
 
-The build workflow creates a debug APK and publishes it here after a successful build:
+- [Latest installable APK](https://github.com/eyerobalex06-arch/Aiultimate/releases/tag/latest-build)
+- [Build status and logs](https://github.com/eyerobalex-arch/Aiultimate/actions/workflows/android.yml)
 
-- [Latest APK release](https://github.com/eyerobalex06-arch/Aiultimate/releases/tag/latest-build)
-- [Build status and logs](https://github.com/eyerobalex06-arch/Aiultimate/actions/workflows/android.yml)
+## What's new in v2
 
-## Features
+- Native chat screen, rather than embedding only one hosted chat website
+- Auto-switch router: when a configured provider fails, is rate-limited, or is unavailable, the app tries another configured provider
+- OpenRouter's `openrouter/free` model router, which can choose from its currently available free models
+- Direct API connectors for Google Gemini, GroqCloud, and Cerebras
+- Provider setup links and editable model IDs
+- API keys encrypted locally with Android Keystore-backed AES-GCM encryption
+- Provider credentials are not included in the app package; users supply their own keys
+- Backups disabled so locally stored provider credentials are not included in Android app backup
+- Searchable directory of model families and tasks
 
-- Dark, purple, mobile-first model explorer
-- Search model families, strengths, tasks, and modality
-- Filters for Coding, Reasoning, Fast, Images, Audio, Local, and Research
-- Individual model cards explaining likely strengths and trade-offs
-- In-app Live AI Chat screen powered by the hosted Hugging Face Chat website
-- Remembers web chat cookies as supported by Android WebView
-- Reopen/retry the hosted chat when the network is available
+## Getting started
 
-## Important boundaries
+1. Install AI OMNIVERSE on Android and open **OPEN MULTI-AI CHAT**.
+2. Select **OpenRouter Free Models**, then tap **GET FREE KEY** to create an OpenRouter API key.
+3. Return to the app, paste the key and press **SAVE KEY**. The app encrypts the key on this device.
+4. Send a message. The default OpenRouter model is `openrouter/free`, which selects from currently available free models.
+5. For more fallback options, repeat the process for Gemini, GroqCloud, and Cerebras. Then select **Auto-switch** so the app can try every configured provider if one fails.
 
-The catalog's model cards are a guide to model families. They do not mean every listed model is installed locally or directly connected to this app. The Live AI Chat screen opens Hugging Face's hosted chat service inside the app; Hugging Face account requirements, model availability, rate limits, and terms are controlled by that service. This is not an offline multi-model engine, and it does not contain private provider API keys.
+Official account/key pages:
+- OpenRouter: https://openrouter.ai/settings/keys
+- Google AI Studio: https://aistudio.google.com/apikey
+- GroqCloud: https://console.groq.com/keys
+- Cerebras: https://cloud.cerebras.ai/platform
 
-Strength labels are practical guidance, not a universal benchmark ranking. Specific strengths vary by model version and task.
+## Important limitations
+
+- No app can honestly promise infinite cloud AI usage. Free services impose request/token quotas, account rules, capacity limits, and changing model availability. Auto-switching helps use other configured services when possible; it does not bypass provider limits.
+- The OpenRouter free-model router currently offers access to multiple free models, but its request limits and model pool can change. Check the provider's current plan and terms.
+- Gemini, GroqCloud, and Cerebras need separate user-created API keys and each may limit use. You do not need to enter payment details unless the provider itself asks, and should not upgrade for this app.
+- Model IDs change over time. If a provider rejects its default model ID, update that provider's **Model ID** field to a currently available model from the provider's official model list.
+- Requests and chat content are sent to the provider that handles each message. Do not send passwords, private keys, or sensitive personal data. Read each provider's data policy. Provider data handling, uptime, quota and model access remain controlled by that provider.
+- API keys are encrypted on this Android device with Android Keystore. They are not embedded in the APK or sent to AI OMNIVERSE servers. Anyone who obtains access to an unlocked device or a modified/rooted system may still pose a risk.
+- The included model directory is informational; the app does not claim every model card is installed locally or individually connected.
+
+## Build
+
+The GitHub Actions workflow builds a debug APK using Gradle and Android SDK 35. A successful build proves compilation/package creation, not that every remote API works on every account/device. Real API requests require provider keys, internet access, and service availability.
