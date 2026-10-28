@@ -461,6 +461,22 @@ public class AiChatActivity extends Activity {
                 return true;
             });
         }
+        menu.getMenu().add("Copy latest AI reply").setOnMenuItemClickListener(item -> {
+            for (int i = history.size() - 1; i >= 0; i--) {
+                ChatMessage message = history.get(i);
+                if (message.role.equals("assistant")
+                    && !message.source.equals("AI OMNIVERSE")
+                    && !message.source.equals("ROUTER")) {
+                    android.content.ClipboardManager clipboard =
+                        (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("AI reply", message.text));
+                    Toast.makeText(this, "Latest AI reply copied.", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+            }
+            Toast.makeText(this, "There isn't an AI reply to copy yet.", Toast.LENGTH_SHORT).show();
+            return true;
+        });
         menu.getMenu().add("Delete this model's API key").setOnMenuItemClickListener(item -> {
             forgetCurrentKey();
             return true;
