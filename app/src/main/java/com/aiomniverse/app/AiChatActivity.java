@@ -677,7 +677,11 @@ public class AiChatActivity extends Activity {
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleMicrosoftRedirect(intent);
+        if (intent.getBooleanExtra("open_onedrive_signin", false)) {
+            showBackupOptions();
+        } else {
+            handleMicrosoftRedirect(intent);
+        }
     }
 
     private void handleMicrosoftRedirect(Intent intent) {
