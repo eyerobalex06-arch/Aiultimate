@@ -122,8 +122,8 @@ public class AgentMissionWorker extends Worker {
                 + "Your role: " + role + ". Work on the user's task from your assigned perspective. "
                 + "Read prior agent messages in the shared group transcript, improve on them, and point out useful disagreements or gaps. "
                 + "Be practical and concrete. Do not claim you performed real-world actions or web research unless tools actually provided them. "
-                + "Return a useful response that other agents can build on.\\n\\nUSER TASK:\\n" + prompt
-                + "\\n\\nSHARED GROUP TRANSCRIPT SO FAR:\\n" + context;
+                + "Return a useful response that other agents can build on.\n\nUSER TASK:\n" + prompt
+                + "\n\nSHARED GROUP TRANSCRIPT SO FAR:\n" + context;
 
             String answer = null;
             String usedProvider = "";
@@ -141,7 +141,7 @@ public class AgentMissionWorker extends Worker {
                 } catch (Exception ex) {
                     String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
                     if (message.length() > 220) message = message.substring(0, 220);
-                    errors += (errors.isEmpty() ? "" : "\\n") + p.label + ": " + message;
+                    errors += (errors.isEmpty() ? "" : "\n") + p.label + ": " + message;
                 }
             }
 
@@ -150,9 +150,9 @@ public class AgentMissionWorker extends Worker {
             log.put("role", role);
             log.put("provider", usedProvider);
             if (answer == null || answer.trim().isEmpty()) {
-                log.put("text", "This agent could not get a reply.\\n" + (errors.isEmpty()
+                log.put("text", "This agent could not get a reply.\n" + (errors.isEmpty()
                     ? "No saved provider key was available." : errors)
-                    + "\\nCheck provider quotas, model availability, and saved API-key settings.");
+                    + "\nCheck provider quotas, model availability, and saved API-key settings.");
                 log.put("error", true);
             } else {
                 log.put("text", answer.trim());
