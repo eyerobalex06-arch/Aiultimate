@@ -117,6 +117,22 @@ public class MainActivity extends Activity {
         liveChat.setOnClickListener(v -> startActivity(new Intent(this, AiChatActivity.class)));
         page.addView(liveChat, liveChatParams);
 
+        Button oneDriveButton = new Button(this);
+        oneDriveButton.setText("SIGN IN TO ONEDRIVE  ☁");
+        oneDriveButton.setTextSize(12);
+        oneDriveButton.setTextColor(white);
+        oneDriveButton.setAllCaps(false);
+        oneDriveButton.setTypeface(Typeface.DEFAULT_BOLD);
+        oneDriveButton.setBackground(gradient(new int[]{Color.rgb(54, 61, 58), Color.rgb(43, 47, 46)}, 16));
+        LinearLayout.LayoutParams oneDriveParams = new LinearLayout.LayoutParams(-1, dp(46));
+        oneDriveParams.topMargin = dp(7);
+        oneDriveButton.setOnClickListener(v -> {
+            Intent account = new Intent(this, AiChatActivity.class);
+            account.putExtra("open_onedrive_signin", true);
+            startActivity(account);
+        });
+        page.addView(oneDriveButton, oneDriveParams);
+
         Button addApiKey = new Button(this);
         addApiKey.setText("ADD API KEY  +");
         addApiKey.setTextSize(13);
