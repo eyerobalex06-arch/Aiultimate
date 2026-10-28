@@ -25,17 +25,18 @@ import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-    private final int bg = Color.rgb(9, 11, 20);
-    private final int panel = Color.rgb(19, 22, 37);
-    private final int white = Color.rgb(245, 247, 255);
-    private final int muted = Color.rgb(160, 168, 190);
-    private final int purple = Color.rgb(167, 139, 250);
+    private final int bg = Color.rgb(33, 33, 33);
+    private final int panel = Color.rgb(47, 47, 47);
+    private final int white = Color.rgb(236, 236, 236);
+    private final int muted = Color.rgb(180, 180, 180);
+    private final int purple = Color.rgb(16, 163, 127);
     private LinearLayout list;
     private EditText search;
     private String activeFilter = "All";
     private final List<Model> models = Arrays.asList(
         new Model("Qwen", "Alibaba", "Strong coding, reasoning, multilingual tasks", "CODING", "REASONING", "MULTILINGUAL", "A flexible family with several model sizes. Pick a size that matches your device or hosted service.", "Text / code"),
-        new Model("DeepSeek", "DeepSeek", "Step-by-step reasoning and code generation", "REASONING", "CODING", "MATH", "Often worth trying for hard logic, mathematics, and programming tasks. Exact strengths vary by model version.", "Text / code"),
+        new Model("DeepSeek", "DeepSeek API", "Reasoning, mathematics, programming, and structured problem solving", "REASONING", "CODING", "MATH", "DeepSeek can be connected directly with its own API key. Tap ADD API to open the official DeepSeek key page and prepare the in-app provider settings.", "Text / code"),
+        new Model("Web Search", "OpenRouter web-search tool", "Give supported chat models access to up-to-date web results and citations", "WEB", "SEARCH", "RESEARCH", "Web search is an API feature, not a standalone model. It uses OpenRouter's web-search tool. Search tooling may have separate usage charges, so check current provider pricing before enabling it.", "Web"),
         new Model("Llama", "Meta", "General chat, writing, tool use, customization", "GENERAL", "WRITING", "OPEN WEIGHTS", "A widely used model family with many sizes and community fine-tunes. Licensing differs by release.", "Text / code"),
         new Model("Gemma", "Google", "Efficient local use, summaries, everyday assistance", "FAST", "LOCAL", "GENERAL", "Smaller variants can be practical on consumer hardware. Hardware needs depend on parameter count and quantization.", "Text"),
         new Model("Mistral", "Mistral AI", "Fast assistants, coding, multilingual chat", "FAST", "CODING", "MULTILINGUAL", "A family of efficient and capable models, including compact options and larger hosted models.", "Text / code"),
@@ -90,10 +91,10 @@ public class MainActivity extends Activity {
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
         hero.setPadding(dp(20), dp(20), dp(20), dp(22));
-        hero.setBackground(gradient(new int[]{Color.rgb(45, 35, 83), Color.rgb(24, 30, 55)}, 24));
+        hero.setBackground(gradient(new int[]{Color.rgb(34, 70, 61), Color.rgb(27, 38, 39)}, 24));
         TextView eyebrow = text("YOUR AI TOOLKIT", 11, Color.rgb(196, 181, 253), true);
         hero.addView(eyebrow);
-        TextView headline = text("Find the right AI\nfor the job.", 29, white, true);
+        TextView headline = text("What would you like\nto explore?", 29, white, true);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(8);
         hero.addView(headline, hp);
@@ -170,8 +171,8 @@ public class MainActivity extends Activity {
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.setPadding(0, dp(4), 0, dp(18));
-        stats.addView(stat("16", "MODEL FAMILIES"), new LinearLayout.LayoutParams(0, -2, 1));
-        stats.addView(stat("6+", "SKILL AREAS"), new LinearLayout.LayoutParams(0, -2, 1));
+        stats.addView(stat("17", "MODELS & TOOLS"), new LinearLayout.LayoutParams(0, -2, 1));
+        stats.addView(stat("7+", "SKILL AREAS"), new LinearLayout.LayoutParams(0, -2, 1));
         stats.addView(stat("FREE", "TO EXPLORE"), new LinearLayout.LayoutParams(0, -2, 1));
         page.addView(stats);
 
@@ -242,7 +243,8 @@ public class MainActivity extends Activity {
             "GroqCloud",
             "Cerebras",
             "Mistral AI",
-            "NVIDIA NIM"
+            "NVIDIA NIM",
+            "DeepSeek API"
         };
         String[] providerUrls = {
             "https://openrouter.ai/keys",
@@ -250,7 +252,8 @@ public class MainActivity extends Activity {
             "https://console.groq.com/keys",
             "https://cloud.cerebras.ai/",
             "https://console.mistral.ai/api-keys/",
-            "https://build.nvidia.com/"
+            "https://build.nvidia.com/",
+            "https://platform.deepseek.com/api_keys"
         };
         new AlertDialog.Builder(this)
             .setTitle("Get an API key")
@@ -347,7 +350,8 @@ public class MainActivity extends Activity {
         card.addView(tags);
 
         Button details = new Button(this);
-        details.setText("VIEW STRENGTHS  ↗");
+        details.setText((m.name.equalsIgnoreCase("DeepSeek") || m.name.equalsIgnoreCase("Web Search"))
+            ? "ADD API  ↗" : "VIEW STRENGTHS  ↗");
         details.setTextSize(11);
         details.setTextColor(white);
         details.setAllCaps(false);
@@ -361,14 +365,54 @@ public class MainActivity extends Activity {
     }
 
     private void showDetails(Model m) {
+        if (m.name.equalsIgnoreCase("DeepSeek")) {
+            new AlertDialog.Builder(this)
+                .setTitle("Connect DeepSeek")
+                .setMessage("DeepSeek needs its own API key. ADD API opens DeepSeek's official API-key page and prepares the DeepSeek provider form in AI OMNIVERSE. After you create a key, return to the app and save it. API usage is controlled by DeepSeek.")
+                .setPositiveButton("ADD API", (d, w) -> launchApiSetup("deepseek", "deepseek-flash",
+                    "https://platform.deepseek.com/api_keys", false))
+                .setNeutralButton("VIEW STRENGTHS", (d, w) -> showModelNotes(m))
+                .setNegativeButton("CANCEL", (d, w) -> d.dismiss())
+                .show();
+            return;
+        }
+        if (m.name.equalsIgnoreCase("Web Search")) {
+            new AlertDialog.Builder(this)
+                .setTitle("Connect Web Search")
+                .setMessage("Web Search uses OpenRouter's web-search tool with compatible chat models. ADD API opens the OpenRouter key page and prepares the app with Web Search enabled. The search tool may have separate usage charges, even when the selected language model is free.")
+                .setPositiveButton("ADD API", (d, w) -> launchApiSetup("openrouter", "openrouter/free",
+                    "https://openrouter.ai/keys", true))
+                .setNeutralButton("HOW IT WORKS", (d, w) -> showModelNotes(m))
+                .setNegativeButton("CANCEL", (d, w) -> d.dismiss())
+                .show();
+            return;
+        }
+        showModelNotes(m);
+    }
+
+    private void showModelNotes(Model m) {
         new AlertDialog.Builder(this)
             .setTitle(m.name + "  •  " + m.maker)
-            .setMessage("BEST AT\n" + m.description + "\n\nSKILL LABELS\n" + m.tags.replace(" ", "  •  ") + "\n\nMODALITY\n" + m.modality + "\n\nNOTES\n" + m.notes + "\n\nThis directory helps you choose a model. It does not claim this model is connected or running inside the app.")
+            .setMessage("BEST AT\n" + m.description + "\n\nSKILL LABELS\n" + m.tags.replace(" ", "  •  ") + "\n\nMODALITY\n" + m.modality + "\n\nNOTES\n" + m.notes + "\n\nThis directory helps you choose a model. It does not claim every model family is connected or running inside the app.")
             .setNeutralButton("TRY AI ONLINE", (d, w) -> {
                 startActivity(new Intent(this, AiChatActivity.class));
             })
             .setPositiveButton("GOT IT", (d, w) -> d.dismiss())
             .show();
+    }
+
+    private void launchApiSetup(String providerId, String modelId, String keyUrl, boolean enableWebSearch) {
+        Intent setup = new Intent(this, AiChatActivity.class);
+        setup.putExtra("open_key_setup", true);
+        setup.putExtra("api_provider_id", providerId);
+        setup.putExtra("requested_model", modelId);
+        if (enableWebSearch) setup.putExtra("enable_web_search", true);
+        startActivity(setup);
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(keyUrl)));
+        } catch (Exception e) {
+            Toast.makeText(this, "Couldn't open the API-key website. The provider settings are ready in AI OMNIVERSE.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
