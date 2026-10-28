@@ -60,17 +60,22 @@ public class AiChatActivity extends Activity {
     private static final String CHAT_HISTORY_PREF = "saved_conversations_json";
     private static final String ACTIVE_CHAT_PREF = "active_chat_id";
     private static final String ONEDRIVE_BACKUP_URI_PREF = "onedrive_backup_uri";
+    private static final String ONEDRIVE_LAST_SYNC_PREF = "onedrive_last_sync";
+    private static final String ONEDRIVE_LAST_ERROR_PREF = "onedrive_last_error";
+    private static final String WEB_SEARCH_PREF = "web_search_enabled";
     private static final int REQUEST_CREATE_BACKUP = 7101;
     private static final int REQUEST_RESTORE_BACKUP = 7102;
-    private static final int BG = Color.rgb(9, 11, 20);
-    private static final int PANEL = Color.rgb(19, 22, 37);
-    private static final int WHITE = Color.rgb(245, 247, 255);
-    private static final int MUTED = Color.rgb(160, 168, 190);
-    private static final int PURPLE = Color.rgb(167, 139, 250);
+    private static final int BG = Color.rgb(33, 33, 33);
+    private static final int PANEL = Color.rgb(47, 47, 47);
+    private static final int WHITE = Color.rgb(236, 236, 236);
+    private static final int MUTED = Color.rgb(180, 180, 180);
+    private static final int PURPLE = Color.rgb(16, 163, 127);
 
     private final List<Provider> providers = Arrays.asList(
-        new Provider("openrouter", "OpenRouter Free Models", "https://openrouter.ai/api/v1/chat/completions",
-            "https://openrouter.ai/settings/keys", "openrouter/free", false),
+        new Provider("openrouter", "OpenRouter · Models + Web Search", "https://openrouter.ai/api/v1/chat/completions",
+            "https://openrouter.ai/keys", "openrouter/free", false),
+        new Provider("deepseek", "DeepSeek API", "https://api.deepseek.com/chat/completions",
+            "https://platform.deepseek.com/api_keys", "deepseek-flash", false),
         new Provider("gemini", "Google Gemini API", "https://generativelanguage.googleapis.com/v1beta/models/",
             "https://aistudio.google.com/apikey", "gemini-3.6-flash", true),
         new Provider("groq", "GroqCloud API", "https://api.groq.com/openai/v1/chat/completions",
@@ -90,7 +95,9 @@ public class AiChatActivity extends Activity {
     private EditText messageInput;
     private TextView providerInfo;
     private TextView connectionStatus;
+    private TextView cloudSyncStatus;
     private Button modelPicker;
+    private Button webSearchButton;
     private LinearLayout configPanel;
     private LinearLayout messagesColumn;
     private ScrollView messagesScroll;
@@ -99,6 +106,7 @@ public class AiChatActivity extends Activity {
     private Button sendButton;
     private int currentProviderIndex = 0;
     private boolean busy = false;
+    private boolean webSearchEnabled = false;
     private final List<ChatMessage> history = new ArrayList<>();
     private final List<SavedChat> savedChats = new ArrayList<>();
     private String activeChatId = "";
@@ -136,6 +144,10 @@ public class AiChatActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        webSearchEnabled = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(WEB_SEARCH_PREF, false)
+            || getIntent().getBooleanExtra("enable_web_search", false);
+        if (getIntent().getBooleanExtra("enable_web_search", false))
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(WEB_SEARCH_PREF, true).apply();
         buildUi();
         loadSavedChats();
         String lastActiveId = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ACTIVE_CHAT_PREF, "");
@@ -146,15 +158,21 @@ public class AiChatActivity extends Activity {
 
         if (getIntent().getBooleanExtra("open_key_setup", false)) {
             configPanel.setVisibility(View.VISIBLE);
-            providerSpinner.setSelection(1);
-            new AlertDialog.Builder(this)
-                .setTitle("Connect an AI provider")
-                .setMessage("Choose a provider, create a key on its official site with GET KEY, then return and save it here. You can add keys for multiple model providers. Keys stay encrypted on this device.")
-                .setPositiveButton("GOT IT", (dialog, which) -> dialog.dismiss())
-                .show();
+            String requestedProviderId = getIntent().getStringExtra("api_provider_id");
+            int targetIndex = providerIndexForId(requestedProviderId);
+            providerSpinner.setSelection(targetIndex);
+            String requestedModel = getIntent().getStringExtra("requested_model");
+            if (requestedModel != null && !requestedModel.trim().isEmpty() && targetIndex > 0) {
+                Provider target = providers.get(targetIndex - 1);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putString(MODEL_KEY_PREFIX + target.id, requestedModel.trim()).apply();
+                modelInput.setText(requestedModel.trim());
+            }
         }
         updateConnectionStatus();
         updateModelPickerLabel();
+        updateWebSearchButton();
+        updateCloudBackupStatus();
     }
 
     private void buildUi() {
@@ -194,14 +212,35 @@ public class AiChatActivity extends Activity {
         LinearLayout modelBar = new LinearLayout(this);
         modelBar.setGravity(Gravity.CENTER_VERTICAL);
         modelBar.setPadding(dp(14), dp(7), dp(14), dp(7));
-        modelPicker = button("Auto-switch · all connected models  ▾", Color.rgb(25, 28, 43));
-        modelPicker.setTextSize(12);
+        modelPicker = button("✦  Auto-switch", PANEL);
+        modelPicker.setTextSize(11);
         modelPicker.setTextColor(WHITE);
         modelPicker.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        modelPicker.setPadding(dp(14), 0, dp(14), 0);
-        modelBar.addView(modelPicker, new LinearLayout.LayoutParams(-1, dp(44)));
+        modelPicker.setMaxLines(1);
+        modelPicker.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        modelPicker.setPadding(dp(13), 0, dp(8), 0);
+        modelBar.addView(modelPicker, new LinearLayout.LayoutParams(0, dp(42), 1f));
         modelPicker.setOnClickListener(v -> showModelPicker());
+
+        webSearchButton = button("⌕  Web", PANEL);
+        webSearchButton.setTextSize(11);
+        webSearchButton.setContentDescription("Toggle real-time web search");
+        LinearLayout.LayoutParams webButtonParams = new LinearLayout.LayoutParams(dp(88), dp(42));
+        webButtonParams.leftMargin = dp(7);
+        modelBar.addView(webSearchButton, webButtonParams);
+        webSearchButton.setOnClickListener(v -> toggleWebSearchMode());
         root.addView(modelBar);
+
+        cloudSyncStatus = text("", 10, MUTED, false);
+        cloudSyncStatus.setGravity(Gravity.CENTER_VERTICAL);
+        cloudSyncStatus.setPadding(dp(13), dp(8), dp(13), dp(8));
+        cloudSyncStatus.setBackground(round(Color.rgb(39, 42, 42), 12));
+        LinearLayout.LayoutParams cloudStatusParams = new LinearLayout.LayoutParams(-1, -2);
+        cloudStatusParams.leftMargin = dp(13);
+        cloudStatusParams.rightMargin = dp(13);
+        cloudStatusParams.bottomMargin = dp(5);
+        root.addView(cloudSyncStatus, cloudStatusParams);
+        cloudSyncStatus.setOnClickListener(v -> showBackupOptions());
 
         configPanel = new LinearLayout(this);
         configPanel.setOrientation(LinearLayout.VERTICAL);
@@ -327,7 +366,8 @@ public class AiChatActivity extends Activity {
             PopupMenu tools = new PopupMenu(this, v);
             tools.getMenu().add("New chat").setOnMenuItemClickListener(item -> { startNewChat(true); return true; });
             tools.getMenu().add("Manage API keys").setOnMenuItemClickListener(item -> { showKeySettings(); return true; });
-            tools.getMenu().add("Back up chats to OneDrive").setOnMenuItemClickListener(item -> { chooseBackupFile(); return true; });
+            tools.getMenu().add("OneDrive history backup").setOnMenuItemClickListener(item -> { showBackupOptions(); return true; });
+            tools.getMenu().add(webSearchEnabled ? "Turn web search off" : "Turn web search on").setOnMenuItemClickListener(item -> { toggleWebSearchMode(); return true; });
             tools.show();
         });
 
@@ -337,7 +377,7 @@ public class AiChatActivity extends Activity {
         messageInput.setMaxLines(5);
         messageInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
         messageInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        messageInput.setBackground(round(Color.rgb(27, 30, 44), 23));
+        messageInput.setBackground(round(Color.rgb(47, 47, 47), 23));
         messageInput.setPadding(dp(15), dp(9), dp(15), dp(9));
         messageInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); return true; }
@@ -345,8 +385,8 @@ public class AiChatActivity extends Activity {
         });
         composer.addView(messageInput, new LinearLayout.LayoutParams(0, -2, 1));
 
-        sendButton = button("↑", Color.rgb(245, 247, 255));
-        sendButton.setTextColor(Color.rgb(20, 22, 32));
+        sendButton = button("↑", PURPLE);
+        sendButton.setTextColor(Color.WHITE);
         sendButton.setTextSize(20);
         sendButton.setContentDescription("Send message");
         LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(46), dp(46));
@@ -374,6 +414,122 @@ public class AiChatActivity extends Activity {
         updateModelPickerLabel();
     }
 
+
+    private int providerIndexForId(String id) {
+        if (id != null) {
+            for (int i = 0; i < providers.size(); i++) {
+                if (providers.get(i).id.equalsIgnoreCase(id)) return i + 1;
+            }
+        }
+        return providers.isEmpty() ? 0 : 1;
+    }
+
+    private Provider providerForId(String id) {
+        if (id != null) for (Provider p : providers) if (p.id.equalsIgnoreCase(id)) return p;
+        return null;
+    }
+
+    private void updateWebSearchButton() {
+        if (webSearchButton == null) return;
+        webSearchButton.setText(webSearchEnabled ? "⌕ Web ✓" : "⌕  Web");
+        webSearchButton.setTextColor(webSearchEnabled ? Color.WHITE : MUTED);
+        webSearchButton.setBackground(round(webSearchEnabled ? Color.rgb(15, 92, 73) : PANEL, 14));
+    }
+
+    private void toggleWebSearchMode() {
+        Provider openRouter = providerForId("openrouter");
+        if (!webSearchEnabled && openRouter != null && !isProviderConfigured(openRouter)) {
+            new AlertDialog.Builder(this)
+                .setTitle("Connect Web Search")
+                .setMessage("Real-time web search uses OpenRouter's web-search tool. Add your OpenRouter API key first. Web-search tools may have separate usage charges, even when the selected model is free.")
+                .setPositiveButton("ADD API", (dialog, which) -> {
+                    webSearchEnabled = true;
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(WEB_SEARCH_PREF, true).apply();
+                    int index = providerIndexForId("openrouter");
+                    configPanel.setAlpha(1f);
+                    configPanel.setVisibility(View.VISIBLE);
+                    providerSpinner.setSelection(index);
+                    updateWebSearchButton();
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(openRouter.keyUrl))); }
+                    catch (Exception e) { Toast.makeText(this, "Couldn't open the OpenRouter API-key page.", Toast.LENGTH_LONG).show(); }
+                })
+                .setNegativeButton("NOT NOW", (dialog, which) -> dialog.dismiss())
+                .show();
+            return;
+        }
+        webSearchEnabled = !webSearchEnabled;
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(WEB_SEARCH_PREF, webSearchEnabled).apply();
+        updateWebSearchButton();
+        Toast.makeText(this, webSearchEnabled
+            ? "Web search is on. Requests will use OpenRouter only."
+            : "Web search is off.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateCloudBackupStatus() {
+        if (cloudSyncStatus == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String target = prefs.getString(ONEDRIVE_BACKUP_URI_PREF, "");
+        String error = prefs.getString(ONEDRIVE_LAST_ERROR_PREF, "");
+        long syncedAt = prefs.getLong(ONEDRIVE_LAST_SYNC_PREF, 0L);
+        if (target.isEmpty()) {
+            cloudSyncStatus.setText("☁  Chat history saves on this phone · Tap to connect OneDrive");
+            cloudSyncStatus.setTextColor(MUTED);
+        } else if (!error.isEmpty()) {
+            cloudSyncStatus.setText("⚠  OneDrive backup needs attention · Tap for options");
+            cloudSyncStatus.setTextColor(Color.rgb(255, 174, 114));
+        } else if (syncedAt == 0L) {
+            cloudSyncStatus.setText("☁  OneDrive connected · First backup queued");
+            cloudSyncStatus.setTextColor(Color.rgb(137, 218, 190));
+        } else {
+            String age = android.text.format.DateUtils.getRelativeTimeSpanString(
+                syncedAt, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString();
+            cloudSyncStatus.setText("☁  OneDrive backup up to date · " + age);
+            cloudSyncStatus.setTextColor(Color.rgb(137, 218, 190));
+        }
+    }
+
+    private void showBackupOptions() {
+        String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ONEDRIVE_BACKUP_URI_PREF, "");
+        if (target.isEmpty()) {
+            new AlertDialog.Builder(this)
+                .setTitle("Save your chat history to OneDrive")
+                .setMessage("Choose a writable location in Android's file picker and select OneDrive. AI OMNIVERSE will then back up conversation history to that JSON file whenever chats change. Your local history stays on this phone too.")
+                .setPositiveButton("CONNECT ONEDRIVE", (dialog, which) -> chooseBackupFile())
+                .setNegativeButton("NOT NOW", (dialog, which) -> dialog.dismiss())
+                .show();
+            return;
+        }
+        String summary = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ONEDRIVE_LAST_ERROR_PREF, "");
+        if (summary.isEmpty()) summary = cloudSyncStatus == null ? "Automatic backup is enabled." : cloudSyncStatus.getText().toString();
+        new AlertDialog.Builder(this)
+            .setTitle("OneDrive chat history")
+            .setMessage(summary + "\n\nChat history is saved locally first. A successful file write updates the backup status.")
+            .setPositiveButton("SYNC NOW", (dialog, which) -> {
+                saveLocalChats();
+                Toast.makeText(this, "OneDrive backup queued.", Toast.LENGTH_SHORT).show();
+                updateCloudBackupStatus();
+            })
+            .setNeutralButton("CHANGE LOCATION", (dialog, which) -> chooseBackupFile())
+            .setNegativeButton("CLOSE", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
+    private void promptToConnectProvider(Provider provider) {
+        configPanel.setAlpha(1f);
+        configPanel.setVisibility(View.VISIBLE);
+        int index = providers.indexOf(provider) + 1;
+        providerSpinner.setSelection(index);
+        new AlertDialog.Builder(this)
+            .setTitle("Connect " + provider.label)
+            .setMessage(provider.label + " needs its own API key. Add API opens the official key page for this provider. After creating a key, return to AI OMNIVERSE and save it in the provider panel.")
+            .setPositiveButton("ADD API", (dialog, which) -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(provider.keyUrl))); }
+                catch (Exception e) { Toast.makeText(this, "Couldn't open the provider's API page.", Toast.LENGTH_LONG).show(); }
+            })
+            .setNeutralButton("ENTER KEY", (dialog, which) -> dialog.dismiss())
+            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
 
     private SavedChat findSavedChat(String id) {
         if (id == null || id.isEmpty()) return null;
@@ -403,13 +559,13 @@ public class AiChatActivity extends Activity {
         if (modelPicker == null) return;
         if (currentProviderIndex <= 0) {
             int ready = getConfiguredProviderCount();
-            modelPicker.setText("✦  Auto-switch · " + ready + " provider" + (ready == 1 ? "" : "s") + " ready  ▾");
+            modelPicker.setText("✦  Auto-switch · " + ready + " ready  ▾");
             return;
         }
         Provider p = providers.get(currentProviderIndex - 1);
         String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
         String shortName = p.label.replace(" API", "").replace("Cloud", "").replace(" Inference", "");
-        String status = isProviderConfigured(p) ? "KEY SAVED" : "ADD KEY";
+        String status = isProviderConfigured(p) ? "✓" : "＋ API";
         modelPicker.setText("✦  " + shortName + " · " + model + " · " + status + "  ▾");
     }
 
@@ -421,7 +577,7 @@ public class AiChatActivity extends Activity {
             String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
             boolean configured = false;
             try { configured = !decryptKey(getSavedKeyForModel(p, model)).trim().isEmpty(); } catch (Exception ignored) {}
-            choices[i + 1] = (configured ? "✓  " : "＋  ") + p.label + "\n" + model + (configured ? " · API KEY SAVED" : " · TAP TO SET UP");
+            choices[i + 1] = (configured ? "✓  " : "＋  ") + p.label + "\n" + model + (configured ? " · CONNECTED" : " · ADD API KEY");
         }
         new AlertDialog.Builder(this)
             .setTitle("Choose a model")
@@ -431,9 +587,7 @@ public class AiChatActivity extends Activity {
                 currentProviderIndex = which;
                 updateModelPickerLabel();
                 if (which > 0 && !isProviderConfigured(providers.get(which - 1))) {
-                    configPanel.setAlpha(1f);
-                    configPanel.setVisibility(View.VISIBLE);
-                    Toast.makeText(this, "Add an API key to use this provider.", Toast.LENGTH_SHORT).show();
+                    promptToConnectProvider(providers.get(which - 1));
                 }
             })
             .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
@@ -639,8 +793,8 @@ public class AiChatActivity extends Activity {
 
     private void chooseBackupFile() {
         new AlertDialog.Builder(this)
-            .setTitle("Connect OneDrive backup")
-            .setMessage("Choose a OneDrive location in the Android file picker and save AI-OMNIVERSE-chats.json. Once connected, AI OMNIVERSE will update that file after messages and when you leave the chat. Conversations are also saved on this phone immediately.")
+            .setTitle("Connect OneDrive chat history")
+            .setMessage("In Android's file picker, open OneDrive and choose where to save AI-OMNIVERSE-chats.json. After you select the file, AI OMNIVERSE will automatically write updated conversation history to it when chats change. Local history stays saved on this phone too.")
             .setPositiveButton("CHOOSE FILE", (dialog, which) -> {
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -671,9 +825,12 @@ public class AiChatActivity extends Activity {
                 int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 getContentResolver().takePersistableUriPermission(uri, flags);
             } catch (Exception ignored) {}
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ONEDRIVE_BACKUP_URI_PREF, uri.toString()).apply();
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(ONEDRIVE_BACKUP_URI_PREF, uri.toString())
+                .remove(ONEDRIVE_LAST_ERROR_PREF).apply();
+            updateCloudBackupStatus();
             saveLocalChats();
-            Toast.makeText(this, "Backup file connected. New messages will automatically update it.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Backup destination connected. Conversation history will sync automatically.", Toast.LENGTH_LONG).show();
         } else if (requestCode == REQUEST_RESTORE_BACKUP) {
             try {
                 String json = readAll(getContentResolver().openInputStream(uri));
@@ -699,6 +856,12 @@ public class AiChatActivity extends Activity {
         if (target.isEmpty()) return;
         final String snapshot = json;
         final Uri uri = Uri.parse(target);
+        runOnUiThread(() -> {
+            if (cloudSyncStatus != null) {
+                cloudSyncStatus.setText("☁  Syncing conversation history to OneDrive…");
+                cloudSyncStatus.setTextColor(Color.rgb(137, 218, 190));
+            }
+        });
         try {
             backupExecutor.execute(() -> {
                 try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
@@ -706,13 +869,23 @@ public class AiChatActivity extends Activity {
                     output.write(snapshot.getBytes(StandardCharsets.UTF_8));
                     output.flush();
                     lastBackupError = "";
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putLong(ONEDRIVE_LAST_SYNC_PREF, System.currentTimeMillis())
+                        .remove(ONEDRIVE_LAST_ERROR_PREF).apply();
+                    runOnUiThread(this::updateCloudBackupStatus);
                 } catch (Exception e) {
                     String error = safeError(e);
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ONEDRIVE_LAST_ERROR_PREF, error).apply();
                     if (!error.equals(lastBackupError)) {
                         lastBackupError = error;
-                        runOnUiThread(() -> Toast.makeText(this,
-                            "Cloud backup didn't finish. Your chat is still saved on this phone. Check your backup location.",
-                            Toast.LENGTH_LONG).show());
+                        runOnUiThread(() -> {
+                            updateCloudBackupStatus();
+                            Toast.makeText(this,
+                                "OneDrive backup didn't finish. Your conversation is still saved on this phone. Check the selected backup location.",
+                                Toast.LENGTH_LONG).show();
+                        });
+                    } else {
+                        runOnUiThread(this::updateCloudBackupStatus);
                     }
                     android.util.Log.w("AIOMNIVERSE", "Cloud backup failed", e);
                 }
@@ -882,7 +1055,8 @@ public class AiChatActivity extends Activity {
                 configPanel.setVisibility(configPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
                 return true;
             });
-        menu.getMenu().add("Set up / change OneDrive backup").setOnMenuItemClickListener(item -> { chooseBackupFile(); return true; });
+        menu.getMenu().add("Set up / change OneDrive backup").setOnMenuItemClickListener(item -> { showBackupOptions(); return true; });
+        menu.getMenu().add(webSearchEnabled ? "Turn web search off" : "Turn web search on").setOnMenuItemClickListener(item -> { toggleWebSearchMode(); return true; });
         menu.getMenu().add("Restore conversations from backup").setOnMenuItemClickListener(item -> { restoreBackupFromFile(); return true; });
 
         android.view.SubMenu keyLinks = menu.getMenu().addSubMenu("Get API key from provider");
@@ -949,7 +1123,7 @@ public class AiChatActivity extends Activity {
         int connected = getConfiguredProviderCount();
         if (connectionStatus != null) {
             connectionStatus.setText("✓  " + connected + " of " + providers.size() +
-                " providers have a saved key. Free-tier quotas and provider availability still apply.");
+                " providers connected. Free-tier quotas and provider availability still apply.");
         }
     }
 
@@ -966,7 +1140,9 @@ public class AiChatActivity extends Activity {
             String errors = "";
             List<Provider> order = getProviderOrder();
             if (order.isEmpty()) {
-                errors = "No API keys are configured yet. Choose OpenRouter, Gemini, GroqCloud, Cerebras, Mistral, or NVIDIA NIM in PROVIDER ROUTER, then use GET FREE KEY to open its official key page.";
+                errors = webSearchEnabled
+                    ? "Web Search needs a saved OpenRouter API key. Open provider settings and connect OpenRouter first."
+                    : "No API keys are configured yet. Choose OpenRouter, DeepSeek, Gemini, GroqCloud, Cerebras, Mistral, or NVIDIA NIM in provider settings, then use GET KEY to open the official key page.";
             } else {
                 for (Provider p : order) {
                     try {
@@ -1009,6 +1185,9 @@ public class AiChatActivity extends Activity {
                 if (!key.trim().isEmpty()) configured.add(p);
             } catch (Exception ignored) {}
         }
+        if (webSearchEnabled) {
+            configured.removeIf(provider -> !provider.id.equals("openrouter"));
+        }
         if (currentProviderIndex > 0) {
             Provider selected = providers.get(currentProviderIndex - 1);
             if (configured.remove(selected)) configured.add(0, selected);
@@ -1045,6 +1224,11 @@ public class AiChatActivity extends Activity {
             request.put("messages", apiMessages);
             request.put("model", model);
             request.put("temperature", 0.7);
+            if (p.id.equals("openrouter") && webSearchEnabled) {
+                JSONArray tools = new JSONArray();
+                tools.put(new JSONObject().put("type", "openrouter:web_search"));
+                request.put("tools", tools);
+            }
         }
 
         String requestUrl;
@@ -1192,7 +1376,7 @@ public class AiChatActivity extends Activity {
         LinearLayout bubble = new LinearLayout(this);
         bubble.setOrientation(LinearLayout.VERTICAL);
         bubble.setPadding(role.equals("user") ? dp(13) : dp(2), dp(9), role.equals("user") ? dp(13) : dp(2), dp(9));
-        if (role.equals("user")) bubble.setBackground(round(Color.rgb(49, 44, 76), 20));
+        if (role.equals("user")) bubble.setBackground(round(Color.rgb(48, 48, 48), 20));
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int bubbleMaxWidth = Math.max(dp(220), screenWidth - dp(role.equals("user") ? 100 : 52));
 
