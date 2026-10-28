@@ -61,11 +61,15 @@ public class AiChatActivity extends Activity {
         new Provider("openrouter", "OpenRouter Free Models", "https://openrouter.ai/api/v1/chat/completions",
             "https://openrouter.ai/settings/keys", "openrouter/free", false),
         new Provider("gemini", "Google Gemini API", "https://generativelanguage.googleapis.com/v1beta/models/",
-            "https://aistudio.google.com/apikey", "gemini-3.5-flash-lite", true),
+            "https://aistudio.google.com/apikey", "gemini-3.6-flash", true),
         new Provider("groq", "GroqCloud API", "https://api.groq.com/openai/v1/chat/completions",
             "https://console.groq.com/keys", "openai/gpt-oss-120b", false),
         new Provider("cerebras", "Cerebras Inference API", "https://api.cerebras.ai/v1/chat/completions",
-            "https://cloud.cerebras.ai/platform", "gpt-oss-120b", false)
+            "https://cloud.cerebras.ai/platform", "gpt-oss-120b", false),
+        new Provider("mistral", "Mistral AI Free Mode", "https://api.mistral.ai/v1/chat/completions",
+            "https://console.mistral.ai/api-keys/", "ministral-8b-latest", false),
+        new Provider("nvidia", "NVIDIA NIM Free Endpoints", "https://integrate.api.nvidia.com/v1/chat/completions",
+            "https://build.nvidia.com/", "nvidia/nemotron-3.5-super-vl-120b-a12b", false)
     );
 
     private Spinner providerSpinner;
@@ -333,7 +337,7 @@ public class AiChatActivity extends Activity {
         if (currentProviderIndex == 0) {
             new AlertDialog.Builder(this)
                 .setTitle("Connect free AI providers")
-                .setMessage("Choose OpenRouter, Gemini, Groq, or Cerebras, then tap GET FREE KEY. The app has no daily message quota of its own. Add multiple eligible free-provider keys and choose Auto-switch to try alternatives after errors or rate limits. Provider quotas, model restrictions, account rules, and availability still apply; auto-switching cannot bypass them or guarantee uninterrupted use. Do not enable paid billing unless you intentionally want to pay.")
+                .setMessage("Choose OpenRouter, Gemini, Groq, Cerebras, Mistral Free Mode, or NVIDIA NIM, then tap GET FREE KEY. The app has no daily message quota of its own. Add multiple eligible free-provider keys and choose Auto-switch to try alternatives after errors or rate limits. Provider quotas, model restrictions, account rules, and availability still apply; auto-switching cannot bypass them or guarantee uninterrupted use. Do not enable paid billing unless you intentionally want to pay.")
                 .setPositiveButton("GOT IT", (d, w) -> d.dismiss()).show();
             return;
         }
