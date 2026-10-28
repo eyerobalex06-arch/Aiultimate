@@ -45,6 +45,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -62,7 +64,16 @@ public class AiChatActivity extends Activity {
     private static final String ONEDRIVE_BACKUP_URI_PREF = "onedrive_backup_uri";
     private static final String ONEDRIVE_LAST_SYNC_PREF = "onedrive_last_sync";
     private static final String ONEDRIVE_LAST_ERROR_PREF = "onedrive_last_error";
+    private static final String ONEDRIVE_CLIENT_ID_PREF = "onedrive_client_id";
+    private static final String ONEDRIVE_ACCESS_TOKEN_PREF = "onedrive_access_token_enc";
+    private static final String ONEDRIVE_REFRESH_TOKEN_PREF = "onedrive_refresh_token_enc";
+    private static final String ONEDRIVE_TOKEN_EXPIRY_PREF = "onedrive_token_expiry";
+    private static final String ONEDRIVE_ACCOUNT_NAME_PREF = "onedrive_account_name";
+    private static final String ONEDRIVE_ACCOUNT_EMAIL_PREF = "onedrive_account_email";
     private static final String WEB_SEARCH_PREF = "web_search_enabled";
+    private static final String ONEDRIVE_HISTORY_FILE = "AI-OMNIVERSE-chats.json";
+    private static final String ONEDRIVE_SCOPE = "Files.ReadWrite.AppFolder User.Read offline_access";
+    private static final String MICROSOFT_CONSUMERS = "https://login.microsoftonline.com/consumers/oauth2/v2.0/";
     private static final int REQUEST_CREATE_BACKUP = 7101;
     private static final int REQUEST_RESTORE_BACKUP = 7102;
     private static final int BG = Color.rgb(33, 33, 33);
@@ -112,6 +123,8 @@ public class AiChatActivity extends Activity {
     private String activeChatId = "";
     private volatile String lastBackupError = "";
     private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService authExecutor = Executors.newSingleThreadExecutor();
+    private volatile boolean oneDriveLoginCancelled = false;
 
     private static class Provider {
         final String id, label, endpoint, keyUrl, defaultModel;
@@ -500,52 +513,111 @@ public class AiChatActivity extends Activity {
             : "Web search is off.", Toast.LENGTH_SHORT).show();
     }
 
+    private boolean isMicrosoftOneDriveSignedIn() {
+        return !getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(ONEDRIVE_REFRESH_TOKEN_PREF, "").isEmpty();
+    }
+
     private void updateCloudBackupStatus() {
         if (cloudSyncStatus == null) return;
         android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String target = prefs.getString(ONEDRIVE_BACKUP_URI_PREF, "");
         String error = prefs.getString(ONEDRIVE_LAST_ERROR_PREF, "");
         long syncedAt = prefs.getLong(ONEDRIVE_LAST_SYNC_PREF, 0L);
-        if (target.isEmpty()) {
-            cloudSyncStatus.setText("☁  Chat history saves on this phone · Tap to connect OneDrive");
-            cloudSyncStatus.setTextColor(MUTED);
-        } else if (!error.isEmpty()) {
-            cloudSyncStatus.setText("⚠  OneDrive backup needs attention · Tap for options");
+        if (!error.isEmpty()) {
+            cloudSyncStatus.setText("⚠  OneDrive needs attention · Tap for details");
             cloudSyncStatus.setTextColor(Color.rgb(255, 174, 114));
-        } else if (syncedAt == 0L) {
-            cloudSyncStatus.setText("☁  OneDrive connected · First backup queued");
+        } else if (isMicrosoftOneDriveSignedIn()) {
+            String account = prefs.getString(ONEDRIVE_ACCOUNT_EMAIL_PREF, "");
+            if (account.isEmpty()) account = prefs.getString(ONEDRIVE_ACCOUNT_NAME_PREF, "Microsoft account");
+            if (syncedAt == 0L) {
+                cloudSyncStatus.setText("☁  OneDrive signed in · First history sync pending");
+            } else {
+                String age = android.text.format.DateUtils.getRelativeTimeSpanString(
+                    syncedAt, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString();
+                cloudSyncStatus.setText("☁  OneDrive · " + account + " · Synced " + age);
+            }
+            cloudSyncStatus.setTextColor(Color.rgb(137, 218, 190));
+        } else if (!target.isEmpty()) {
+            if (syncedAt == 0L) {
+                cloudSyncStatus.setText("☁  OneDrive file backup connected · First sync pending");
+            } else {
+                String age = android.text.format.DateUtils.getRelativeTimeSpanString(
+                    syncedAt, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString();
+                cloudSyncStatus.setText("☁  OneDrive file backup · Synced " + age);
+            }
             cloudSyncStatus.setTextColor(Color.rgb(137, 218, 190));
         } else {
-            String age = android.text.format.DateUtils.getRelativeTimeSpanString(
-                syncedAt, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString();
-            cloudSyncStatus.setText("☁  OneDrive backup up to date · " + age);
-            cloudSyncStatus.setTextColor(Color.rgb(137, 218, 190));
+            cloudSyncStatus.setText("☁  Chat history saved on this phone · Sign in to OneDrive");
+            cloudSyncStatus.setTextColor(MUTED);
         }
     }
 
     private void showBackupOptions() {
-        String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ONEDRIVE_BACKUP_URI_PREF, "");
-        if (target.isEmpty()) {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (isMicrosoftOneDriveSignedIn()) {
+            String account = prefs.getString(ONEDRIVE_ACCOUNT_EMAIL_PREF, "");
+            if (account.isEmpty()) account = prefs.getString(ONEDRIVE_ACCOUNT_NAME_PREF, "Microsoft account");
+            String summary = prefs.getString(ONEDRIVE_LAST_ERROR_PREF, "");
+            if (summary.isEmpty()) summary = cloudSyncStatus == null ? "Automatic OneDrive history backup is enabled." : cloudSyncStatus.getText().toString();
             new AlertDialog.Builder(this)
-                .setTitle("Save your chat history to OneDrive")
-                .setMessage("Choose a writable location in Android's file picker and select OneDrive. AI OMNIVERSE will then back up conversation history to that JSON file whenever chats change. Your local history stays on this phone too.")
-                .setPositiveButton("CONNECT ONEDRIVE", (dialog, which) -> chooseBackupFile())
-                .setNegativeButton("NOT NOW", (dialog, which) -> dialog.dismiss())
+                .setTitle("OneDrive account")
+                .setMessage("Signed in as " + account + "\n\n" + summary + "\n\nChat history is stored in AI OMNIVERSE's private OneDrive app folder. Local history remains available on this phone.")
+                .setPositiveButton("SYNC NOW", (dialog, which) -> {
+                    saveLocalChats();
+                    Toast.makeText(this, "OneDrive sync queued.", Toast.LENGTH_SHORT).show();
+                    updateCloudBackupStatus();
+                })
+                .setNeutralButton("CHANGE APP ID", (dialog, which) -> promptForOneDriveClientId())
+                .setNegativeButton("CLOSE", (dialog, which) -> dialog.dismiss())
                 .show();
             return;
         }
-        String summary = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ONEDRIVE_LAST_ERROR_PREF, "");
-        if (summary.isEmpty()) summary = cloudSyncStatus == null ? "Automatic backup is enabled." : cloudSyncStatus.getText().toString();
+        String target = prefs.getString(ONEDRIVE_BACKUP_URI_PREF, "");
+        if (!target.isEmpty()) {
+            String summary = prefs.getString(ONEDRIVE_LAST_ERROR_PREF, "");
+            if (summary.isEmpty()) summary = cloudSyncStatus == null ? "File-based backup is enabled." : cloudSyncStatus.getText().toString();
+            new AlertDialog.Builder(this)
+                .setTitle("OneDrive history backup")
+                .setMessage(summary + "\n\nFor direct Microsoft sign-in and automatic sync to the private app folder, choose SIGN IN WITH MICROSOFT. Your file-picker backup remains available.")
+                .setPositiveButton("SIGN IN WITH MICROSOFT", (dialog, which) -> beginOneDriveSignIn())
+                .setNeutralButton("SYNC FILE NOW", (dialog, which) -> { saveLocalChats(); updateCloudBackupStatus(); })
+                .setNegativeButton("CLOSE", (dialog, which) -> dialog.dismiss())
+                .show();
+            return;
+        }
         new AlertDialog.Builder(this)
-            .setTitle("OneDrive chat history")
-            .setMessage(summary + "\n\nChat history is saved locally first. A successful file write updates the backup status.")
-            .setPositiveButton("SYNC NOW", (dialog, which) -> {
-                saveLocalChats();
-                Toast.makeText(this, "OneDrive backup queued.", Toast.LENGTH_SHORT).show();
-                updateCloudBackupStatus();
+            .setTitle("Connect OneDrive")
+            .setMessage("Sign in with your Microsoft account to back up chat history automatically to AI OMNIVERSE's private OneDrive app folder. Your password is entered only on Microsoft's sign-in page.\n\nYou can also keep using local history without signing in.")
+            .setPositiveButton("SIGN IN WITH MICROSOFT", (dialog, which) -> beginOneDriveSignIn())
+            .setNeutralButton("USE FILE PICKER INSTEAD", (dialog, which) -> chooseBackupFile())
+            .setNegativeButton("NOT NOW", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
+    private void promptForOneDriveClientId() {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        EditText clientIdField = input("Microsoft application (client) ID", false);
+        clientIdField.setText(prefs.getString(ONEDRIVE_CLIENT_ID_PREF, ""));
+        clientIdField.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(this)
+            .setTitle("Set up Microsoft sign-in")
+            .setMessage("AI OMNIVERSE needs the public Client ID from your Microsoft app registration. Do not enter a client secret. Register an app that supports personal Microsoft accounts, enable public-client/device-code flow, and add Microsoft Graph delegated permissions Files.ReadWrite.AppFolder and User.Read. The device-code flow does not need a redirect URI.")
+            .setView(clientIdField)
+            .setPositiveButton("SAVE & SIGN IN", (dialog, which) -> {
+                String clientId = clientIdField.getText().toString().trim();
+                if (clientId.isEmpty()) {
+                    Toast.makeText(this, "Enter the Microsoft application Client ID first.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                prefs.edit().putString(ONEDRIVE_CLIENT_ID_PREF, clientId).apply();
+                beginOneDriveSignIn();
             })
-            .setNeutralButton("CHANGE LOCATION", (dialog, which) -> chooseBackupFile())
-            .setNegativeButton("CLOSE", (dialog, which) -> dialog.dismiss())
+            .setNeutralButton("REGISTER APP ↗", (dialog, which) -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"))); }
+                catch (Exception e) { Toast.makeText(this, "Open Microsoft Entra app registrations in your browser.", Toast.LENGTH_LONG).show(); }
+            })
+            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
             .show();
     }
 
