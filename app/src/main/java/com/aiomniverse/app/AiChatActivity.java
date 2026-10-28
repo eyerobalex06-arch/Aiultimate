@@ -466,6 +466,8 @@ public class AiChatActivity extends Activity {
                     configPanel.setAlpha(1f);
                     configPanel.setVisibility(View.VISIBLE);
                     providerSpinner.setSelection(index);
+                    currentProviderIndex = index;
+                    updateModelPickerLabel();
                     updateWebSearchButton();
                     try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(openRouter.keyUrl))); }
                     catch (Exception e) { Toast.makeText(this, "Couldn't open the OpenRouter API-key page.", Toast.LENGTH_LONG).show(); }
@@ -476,6 +478,12 @@ public class AiChatActivity extends Activity {
         }
         webSearchEnabled = !webSearchEnabled;
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(WEB_SEARCH_PREF, webSearchEnabled).apply();
+        if (webSearchEnabled) {
+            int index = providerIndexForId("openrouter");
+            providerSpinner.setSelection(index);
+            currentProviderIndex = index;
+            updateModelPickerLabel();
+        }
         updateWebSearchButton();
         Toast.makeText(this, webSearchEnabled
             ? "Web search is on. Requests will use OpenRouter only."
