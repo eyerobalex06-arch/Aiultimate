@@ -13,6 +13,8 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.net.Uri;
 import android.widget.ArrayAdapter;
@@ -109,6 +111,7 @@ public class AiChatActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         buildUi();
         if (getIntent().getBooleanExtra("open_key_setup", false)) {
             // Start directly on a real provider so the key field is enabled immediately.
@@ -230,7 +233,7 @@ public class AiChatActivity extends Activity {
         });
         saveButton.setOnClickListener(v -> saveCurrentKey());
         forgetButton.setOnClickListener(v -> forgetCurrentKey());
-        getKeyButton.setOnClickListener(v -> openProviderSetup());
+        getKeyButton.setOnClickListener(v -> showProviderChooserForKey());
 
         TextView chatLabel = text("CONVERSATION", 11, WHITE, true);
         LinearLayout.LayoutParams chatLabelParams = new LinearLayout.LayoutParams(-1, -2);
@@ -300,7 +303,17 @@ public class AiChatActivity extends Activity {
         composer.addView(sendButton, sendParams);
         sendButton.setOnClickListener(v -> sendMessage());
         root.addView(composer);
+        // Android 15+ draws edge-to-edge by default. Keep the composer above
+        // the system navigation gesture area while letting the keyboard resize the screen.
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            int navigationBottom = android.os.Build.VERSION.SDK_INT >= 30
+                ? insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+                : insets.getSystemWindowInsetBottom();
+            composer.setPadding(dp(10), dp(8), dp(10), dp(8) + navigationBottom);
+            return insets;
+        });
         setContentView(root);
+        root.requestApplyInsets();
     }
 
     private void refreshProviderForm() {
@@ -463,6 +476,27 @@ public class AiChatActivity extends Activity {
         menu.show();
     }
 
+    private void showProviderChooserForKey() {
+        String[] names = new String[providers.size()];
+        for (int i = 0; i < providers.size(); i++) {
+            names[i] = providers.get(i).label;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("Choose an API key provider")
+            .setMessage("Pick the service where you created your key. NVIDIA NIM, Google Gemini, GroqCloud, Cerebras, Mistral, and OpenRouter are all supported.")
+            .setItems(names, (dialog, which) -> {
+                Provider selected = providers.get(which);
+                providerSpinner.setSelection(which + 1);
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(selected.keyUrl)));
+                } catch (Exception e) {
+                    Toast.makeText(this, "Couldn't open " + selected.label + " website.", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
     private void openProviderSetup() {
         if (currentProviderIndex == 0) {
             new AlertDialog.Builder(this)
@@ -507,7 +541,7 @@ public class AiChatActivity extends Activity {
             String errors = "";
             List<Provider> order = getProviderOrder();
             if (order.isEmpty()) {
-                errors = "No API keys are configured yet. Select OpenRouter Free, Gemini, Groq, or Cerebras above and tap GET FREE KEY.";
+                errors = "No API keys are configured yet. Choose OpenRouter, Gemini, GroqCloud, Cerebras, Mistral, or NVIDIA NIM in PROVIDER ROUTER, then use GET FREE KEY to open its official key page.";
             } else {
                 for (Provider p : order) {
                     try {
