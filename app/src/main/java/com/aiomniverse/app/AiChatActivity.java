@@ -104,7 +104,7 @@ public class AiChatActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         buildUi();
-        addMessage("assistant", "Welcome to the multi-AI chat hub. Add one or more free-tier API keys above. Auto-switch will try each configured provider if one is unavailable or reaches a limit. Your keys are encrypted on this device; messages go to whichever provider answers.", "AI OMNIVERSE");
+        addMessage("assistant", "Welcome to AI OMNIVERSE cloud chat. Add free-tier provider keys to connect. Auto-switch retries other configured providers when one fails or is rate-limited. Important: free quotas, model access, and availability are controlled by each provider and can change. This app does not promise unlimited cloud usage. Your keys are encrypted on this device; messages are sent to the provider that answers.", "AI OMNIVERSE");
         updateConnectionStatus();
     }
 
@@ -266,7 +266,7 @@ public class AiChatActivity extends Activity {
     private void refreshProviderForm() {
         boolean auto = currentProviderIndex == 0;
         if (auto) {
-            providerInfo.setText("Tries every configured provider in order. Select a provider below to save a key. Tap this note to learn how the router works.");
+            providerInfo.setText("Tries saved providers in order and falls back after errors or rate limits. Free quotas, account rules, and availability still apply; switching providers does not bypass limits. Select a provider below to add its key.");
             modelInput.setText("");
             modelInput.setHint("Auto mode chooses each provider's saved model");
             keyInput.setText("");
@@ -333,7 +333,7 @@ public class AiChatActivity extends Activity {
         if (currentProviderIndex == 0) {
             new AlertDialog.Builder(this)
                 .setTitle("Connect free AI providers")
-                .setMessage("Choose OpenRouter, Gemini, Groq, or Cerebras in the provider list, then tap GET FREE KEY. Add multiple keys and choose Auto-switch to retry with another provider when one is unavailable or rate-limited. Providers still set their own free limits.")
+                .setMessage("Choose OpenRouter, Gemini, Groq, or Cerebras, then tap GET FREE KEY. Add multiple provider keys and choose Auto-switch to try alternatives after an error. Free plans have provider-specific quotas and model restrictions; availability can change, and auto-switching cannot guarantee uninterrupted or unlimited use. Do not enable paid billing unless you intentionally want to pay.")
                 .setPositiveButton("GOT IT", (d, w) -> d.dismiss()).show();
             return;
         }
@@ -573,7 +573,7 @@ public class AiChatActivity extends Activity {
         sendButton.setEnabled(!value);
         sendButton.setText(value ? "WAIT..." : "SEND  ➤");
         messageInput.setEnabled(!value);
-        if (value) connectionStatus.setText("Contacting the selected provider, then trying alternatives if needed...");
+        if (value) connectionStatus.setText("Trying configured cloud providers. Free quotas and availability apply...");
     }
 
     private void addMessage(String role, String body, String source) {
