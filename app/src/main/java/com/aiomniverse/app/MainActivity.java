@@ -155,14 +155,6 @@ public class MainActivity extends Activity {
         agentHub.setOnClickListener(v -> startActivity(new Intent(this, AgentWorkspaceActivity.class)));
         page.addView(agentHub, agentHubParams);
 
-        LinearLayout stats = new LinearLayout(this);
-        stats.setOrientation(LinearLayout.HORIZONTAL);
-        stats.setPadding(0, dp(14), 0, dp(18));
-        stats.addView(stat("16", "MODEL FAMILIES"), new LinearLayout.LayoutParams(0, -2, 1));
-        stats.addView(stat("6+", "SKILL AREAS"), new LinearLayout.LayoutParams(0, -2, 1));
-        stats.addView(stat("FREE", "TO EXPLORE"), new LinearLayout.LayoutParams(0, -2, 1));
-        page.addView(stats);
-
         search = new EditText(this);
         search.setSingleLine(true);
         search.setTextSize(14);
@@ -171,7 +163,17 @@ public class MainActivity extends Activity {
         search.setHint("⌕   Search models, skills, or tasks");
         search.setPadding(dp(15), 0, dp(15), 0);
         search.setBackground(round(panel, 16));
-        page.addView(search, new LinearLayout.LayoutParams(-1, dp(52)));
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, dp(56));
+        searchParams.bottomMargin = dp(14);
+        page.addView(search, searchParams);
+
+        LinearLayout stats = new LinearLayout(this);
+        stats.setOrientation(LinearLayout.HORIZONTAL);
+        stats.setPadding(0, dp(4), 0, dp(18));
+        stats.addView(stat("16", "MODEL FAMILIES"), new LinearLayout.LayoutParams(0, -2, 1));
+        stats.addView(stat("6+", "SKILL AREAS"), new LinearLayout.LayoutParams(0, -2, 1));
+        stats.addView(stat("FREE", "TO EXPLORE"), new LinearLayout.LayoutParams(0, -2, 1));
+        page.addView(stats);
 
         TextView section = text("EXPLORE MODELS", 13, white, true);
         LinearLayout.LayoutParams secp = new LinearLayout.LayoutParams(-1, -2);
