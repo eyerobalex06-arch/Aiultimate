@@ -1,6 +1,8 @@
 package com.aiomniverse.app;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
 import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -267,6 +269,10 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
             .setTitle(m.name + "  •  " + m.maker)
             .setMessage("BEST AT\n" + m.description + "\n\nSKILL LABELS\n" + m.tags.replace(" ", "  •  ") + "\n\nMODALITY\n" + m.modality + "\n\nNOTES\n" + m.notes + "\n\nThis directory helps you choose a model. It does not claim this model is connected or running inside the app.")
+            .setNeutralButton("TRY AI ONLINE", (d, w) -> {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/chat"));
+                startActivity(intent);
+            })
             .setPositiveButton("GOT IT", (d, w) -> d.dismiss())
             .show();
     }
