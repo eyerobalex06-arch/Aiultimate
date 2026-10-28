@@ -103,6 +103,34 @@ public class MainActivity extends Activity {
         hero.addView(subtitle, sp);
         page.addView(hero);
 
+        Button getApiKey = new Button(this);
+        getApiKey.setText("GET API KEY  ↗");
+        getApiKey.setTextSize(13);
+        getApiKey.setTextColor(white);
+        getApiKey.setAllCaps(false);
+        getApiKey.setTypeface(Typeface.DEFAULT_BOLD);
+        getApiKey.setBackground(gradient(new int[]{Color.rgb(32, 111, 145), Color.rgb(35, 75, 118)}, 16));
+        LinearLayout.LayoutParams getApiKeyParams = new LinearLayout.LayoutParams(-1, dp(48));
+        getApiKeyParams.topMargin = dp(12);
+        getApiKey.setOnClickListener(v -> showGetApiKeyDialog());
+        page.addView(getApiKey, getApiKeyParams);
+
+        Button addApiKey = new Button(this);
+        addApiKey.setText("ADD API KEY  +");
+        addApiKey.setTextSize(13);
+        addApiKey.setTextColor(white);
+        addApiKey.setAllCaps(false);
+        addApiKey.setTypeface(Typeface.DEFAULT_BOLD);
+        addApiKey.setBackground(gradient(new int[]{Color.rgb(91, 70, 164), Color.rgb(69, 54, 127)}, 16));
+        LinearLayout.LayoutParams addApiKeyParams = new LinearLayout.LayoutParams(-1, dp(48));
+        addApiKeyParams.topMargin = dp(7);
+        addApiKey.setOnClickListener(v -> {
+            Intent setup = new Intent(this, AiChatActivity.class);
+            setup.putExtra("open_key_setup", true);
+            startActivity(setup);
+        });
+        page.addView(addApiKey, addApiKeyParams);
+
         Button liveChat = new Button(this);
         liveChat.setText("OPEN MULTI-AI CHAT  ↗");
         liveChat.setTextSize(13);
@@ -111,7 +139,7 @@ public class MainActivity extends Activity {
         liveChat.setTypeface(Typeface.DEFAULT_BOLD);
         liveChat.setBackground(gradient(new int[]{Color.rgb(126, 87, 194), Color.rgb(91, 70, 164)}, 16));
         LinearLayout.LayoutParams liveChatParams = new LinearLayout.LayoutParams(-1, dp(50));
-        liveChatParams.topMargin = dp(12);
+        liveChatParams.topMargin = dp(8);
         liveChat.setOnClickListener(v -> startActivity(new Intent(this, AiChatActivity.class)));
         page.addView(liveChat, liveChatParams);
 
@@ -203,6 +231,41 @@ public class MainActivity extends Activity {
             @Override public void afterTextChanged(Editable e) {}
         });
         renderModels();
+    }
+
+    private void showGetApiKeyDialog() {
+        String[] providerNames = {
+            "OpenRouter (recommended to start)",
+            "Google Gemini",
+            "GroqCloud",
+            "Cerebras",
+            "Mistral AI",
+            "NVIDIA NIM"
+        };
+        String[] providerUrls = {
+            "https://openrouter.ai/keys",
+            "https://aistudio.google.com/apikey",
+            "https://console.groq.com/keys",
+            "https://cloud.cerebras.ai/",
+            "https://console.mistral.ai/api-keys/",
+            "https://build.nvidia.com/"
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("Get an API key")
+            .setMessage("Choose a provider to create your own key on its official website. The provider creates the key after you sign in; AI OMNIVERSE cannot generate someone else's API key for you. After creating it, return here and tap ADD API KEY to save it.")
+            .setItems(providerNames, (dialog, which) -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(providerUrls[which])));
+                } catch (Exception e) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Couldn't open website")
+                        .setMessage("Open the provider website in your browser and try again.")
+                        .setPositiveButton("OK", (d, w) -> d.dismiss())
+                        .show();
+                }
+            })
+            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
+            .show();
     }
 
     private LinearLayout stat(String number, String label) {
