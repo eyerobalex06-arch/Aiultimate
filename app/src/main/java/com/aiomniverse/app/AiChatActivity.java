@@ -39,6 +39,8 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -74,6 +76,9 @@ public class AiChatActivity extends Activity {
     private static final String ONEDRIVE_HISTORY_FILE = "AI-OMNIVERSE-chats.json";
     private static final String ONEDRIVE_SCOPE = "Files.ReadWrite.AppFolder User.Read offline_access";
     private static final String MICROSOFT_CONSUMERS = "https://login.microsoftonline.com/consumers/oauth2/v2.0/";
+    private static final String ONEDRIVE_REDIRECT_URI = "aiomniverse://auth";
+    private static final String ONEDRIVE_PENDING_STATE_PREF = "onedrive_pending_oauth_state";
+    private static final String ONEDRIVE_PENDING_VERIFIER_PREF = "onedrive_pending_pkce_verifier_enc";
     private static final int REQUEST_CREATE_BACKUP = 7101;
     private static final int REQUEST_RESTORE_BACKUP = 7102;
     private static final int BG = Color.rgb(33, 33, 33);
@@ -187,6 +192,7 @@ public class AiChatActivity extends Activity {
         updateWebSearchButton();
         updateCloudBackupStatus();
         if (getIntent().getBooleanExtra("open_onedrive_signin", false)) showBackupOptions();
+        handleMicrosoftRedirect(getIntent());
     }
 
     private void buildUi() {
@@ -597,17 +603,17 @@ public class AiChatActivity extends Activity {
 
     private void promptForOneDriveClientId() {
         android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        EditText clientIdField = input("Microsoft application (client) ID", false);
+        EditText clientIdField = input("Application (client) ID", false);
         clientIdField.setText(prefs.getString(ONEDRIVE_CLIENT_ID_PREF, ""));
         clientIdField.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
         new AlertDialog.Builder(this)
-            .setTitle("Set up Microsoft sign-in")
-            .setMessage("AI OMNIVERSE needs the public Client ID from your Microsoft app registration. Do not enter a client secret. Register an app that supports personal Microsoft accounts, enable public-client/device-code flow, and add Microsoft Graph delegated permissions Files.ReadWrite.AppFolder and User.Read. The device-code flow does not need a redirect URI.")
+            .setTitle("Connect Microsoft OneDrive")
+            .setMessage("One-time setup only. Microsoft needs an app ID before AI OMNIVERSE can sign in.\n\n1. Tap REGISTER APP and create an app named AI OMNIVERSE for personal Microsoft accounts.\n2. Under Authentication, add Mobile and desktop applications and this custom redirect URI exactly: aiomniverse://auth\n3. Turn on Allow public client flows. Under API permissions, add Microsoft Graph delegated permissions Files.ReadWrite.AppFolder and User.Read.\n4. Copy the app's Application (client) ID and paste it below. No client secret is needed.\n\nAfter setup, the Sign in button opens Microsoft's normal email/password page. Your password is entered on Microsoft, never inside AI OMNIVERSE.")
             .setView(clientIdField)
             .setPositiveButton("SAVE & SIGN IN", (dialog, which) -> {
                 String clientId = clientIdField.getText().toString().trim();
                 if (clientId.isEmpty()) {
-                    Toast.makeText(this, "Enter the Microsoft application Client ID first.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Paste the Application (client) ID first.", Toast.LENGTH_LONG).show();
                     return;
                 }
                 prefs.edit().putString(ONEDRIVE_CLIENT_ID_PREF, clientId).apply();
@@ -621,6 +627,8 @@ public class AiChatActivity extends Activity {
             .show();
     }
 
+    // Uses the system browser for Microsoft's normal email/password and MFA screens.
+    // AI OMNIVERSE never sees or stores the Microsoft password.
     private void beginOneDriveSignIn() {
         String clientId = getSharedPreferences(PREFS, MODE_PRIVATE)
             .getString(ONEDRIVE_CLIENT_ID_PREF, "").trim();
@@ -628,85 +636,117 @@ public class AiChatActivity extends Activity {
             promptForOneDriveClientId();
             return;
         }
-        oneDriveLoginCancelled = false;
-        Toast.makeText(this, "Starting secure Microsoft sign-in…", Toast.LENGTH_SHORT).show();
-        authExecutor.execute(() -> {
-            try {
-                Map<String, String> values = new HashMap<>();
-                values.put("client_id", clientId);
-                values.put("scope", ONEDRIVE_SCOPE);
-                JSONObject device = postMicrosoftForm(MICROSOFT_CONSUMERS + "devicecode", values);
-                if (device.has("error")) throw new Exception(device.optString("error_description", device.optString("error")));
-                String deviceCode = device.optString("device_code", "");
-                String userCode = device.optString("user_code", "");
-                String verificationUri = device.optString("verification_uri", "https://microsoft.com/devicelogin");
-                int expiresIn = device.optInt("expires_in", 900);
-                int interval = Math.max(3, device.optInt("interval", 5));
-                String message = device.optString("message",
-                    "Open " + verificationUri + " and enter this code: " + userCode);
-                if (deviceCode.isEmpty() || userCode.isEmpty()) throw new Exception("Microsoft did not return a sign-in code. Check the Client ID and app registration.");
-                runOnUiThread(() -> new AlertDialog.Builder(this)
-                    .setTitle("Sign in to OneDrive")
-                    .setMessage(message + "\n\nAfter you approve access, AI OMNIVERSE will finish sign-in and sync your chat history. Your Microsoft password is entered only on Microsoft's page.")
-                    .setPositiveButton("OPEN MICROSOFT SIGN-IN", (dialog, which) -> {
-                        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(verificationUri))); }
-                        catch (Exception e) {
-                            Toast.makeText(this, "Open microsoft.com/devicelogin and enter the code shown here.", Toast.LENGTH_LONG).show();
-                        }
-                        showOneDrivePollingDialog(clientId, deviceCode, expiresIn, interval);
-                    })
-                    .setNegativeButton("CANCEL", (dialog, which) -> { oneDriveLoginCancelled = true; })
-                    .show());
-            } catch (Exception e) {
-                String error = safeError(e);
-                runOnUiThread(() -> showOneDriveAuthError("Couldn't start Microsoft sign-in", error));
-            }
-        });
+        try {
+            byte[] random = new byte[32];
+            SecureRandom secureRandom = new SecureRandom();
+            secureRandom.nextBytes(random);
+            String state = Base64.encodeToString(random,
+                Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+            secureRandom.nextBytes(random);
+            String verifier = Base64.encodeToString(random,
+                Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+            String challenge = Base64.encodeToString(
+                MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII)),
+                Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(ONEDRIVE_PENDING_STATE_PREF, state)
+                .putString(ONEDRIVE_PENDING_VERIFIER_PREF, encryptKey(verifier))
+                .remove(ONEDRIVE_LAST_ERROR_PREF)
+                .apply();
+
+            Uri authorizationUri = Uri.parse(MICROSOFT_CONSUMERS + "authorize").buildUpon()
+                .appendQueryParameter("client_id", clientId)
+                .appendQueryParameter("response_type", "code")
+                .appendQueryParameter("redirect_uri", ONEDRIVE_REDIRECT_URI)
+                .appendQueryParameter("response_mode", "query")
+                .appendQueryParameter("scope", ONEDRIVE_SCOPE)
+                .appendQueryParameter("state", state)
+                .appendQueryParameter("code_challenge", challenge)
+                .appendQueryParameter("code_challenge_method", "S256")
+                .appendQueryParameter("prompt", "select_account")
+                .build();
+
+            startActivity(new Intent(Intent.ACTION_VIEW, authorizationUri));
+        } catch (Exception e) {
+            showOneDriveAuthError("Couldn't open Microsoft sign-in", safeError(e)
+                + "\n\nCheck the Client ID and app registration settings, then try again.");
+        }
     }
 
-    private void showOneDrivePollingDialog(String clientId, String deviceCode, int expiresIn, int interval) {
-        oneDriveLoginCancelled = false;
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleMicrosoftRedirect(intent);
+    }
+
+    private void handleMicrosoftRedirect(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri uri = intent.getData();
+        if (!"aiomniverse".equals(uri.getScheme()) || !"auth".equals(uri.getHost())) return;
+
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String expectedState = prefs.getString(ONEDRIVE_PENDING_STATE_PREF, "");
+        String returnedState = uri.getQueryParameter("state");
+        if (expectedState.isEmpty() || returnedState == null || !expectedState.equals(returnedState)) {
+            showOneDriveAuthError("Microsoft sign-in couldn't be verified",
+                "The sign-in response didn't match the request that AI OMNIVERSE started. Please tap Sign in to OneDrive and try again.");
+            return;
+        }
+
+        String authError = uri.getQueryParameter("error");
+        if (authError != null && !authError.isEmpty()) {
+            prefs.edit().remove(ONEDRIVE_PENDING_STATE_PREF).remove(ONEDRIVE_PENDING_VERIFIER_PREF).apply();
+            String description = uri.getQueryParameter("error_description");
+            showOneDriveAuthError("Microsoft sign-in wasn't completed",
+                description == null || description.isEmpty() ? authError : description);
+            return;
+        }
+
+        String code = uri.getQueryParameter("code");
+        String encryptedVerifier = prefs.getString(ONEDRIVE_PENDING_VERIFIER_PREF, "");
+        String clientId = prefs.getString(ONEDRIVE_CLIENT_ID_PREF, "").trim();
+        prefs.edit().remove(ONEDRIVE_PENDING_STATE_PREF).remove(ONEDRIVE_PENDING_VERIFIER_PREF).apply();
+        if (code == null || code.isEmpty() || encryptedVerifier.isEmpty() || clientId.isEmpty()) {
+            showOneDriveAuthError("Microsoft sign-in didn't finish",
+                "Microsoft didn't return the information needed to finish signing in. Please try again.");
+            return;
+        }
+
         AlertDialog waiting = new AlertDialog.Builder(this)
-            .setTitle("Waiting for Microsoft")
-            .setMessage("Finish signing in in your browser. AI OMNIVERSE will automatically detect approval and connect OneDrive. Keep this screen open for a moment.")
-            .setNegativeButton("CANCEL SIGN-IN", (dialog, which) -> { oneDriveLoginCancelled = true; })
+            .setTitle("Connecting OneDrive")
+            .setMessage("Microsoft approved sign-in. AI OMNIVERSE is connecting your account and syncing your chat history.")
+            .setCancelable(false)
             .create();
-        waiting.setCancelable(false);
         waiting.show();
+
         authExecutor.execute(() -> {
             try {
-                long deadline = System.currentTimeMillis() + Math.max(60, expiresIn) * 1000L;
-                int pollInterval = interval;
-                JSONObject token = null;
-                while (!oneDriveLoginCancelled && System.currentTimeMillis() < deadline) {
-                    Thread.sleep(pollInterval * 1000L);
-                    if (oneDriveLoginCancelled) break;
-                    Map<String, String> values = new HashMap<>();
-                    values.put("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
-                    values.put("client_id", clientId);
-                    values.put("device_code", deviceCode);
-                    JSONObject response = postMicrosoftForm(MICROSOFT_CONSUMERS + "token", values);
-                    if (response.has("access_token")) {
-                        token = response;
-                        break;
-                    }
-                    String error = response.optString("error", "");
-                    if ("authorization_pending".equals(error)) continue;
-                    if ("slow_down".equals(error)) { pollInterval += 5; continue; }
-                    if ("authorization_declined".equals(error)) throw new Exception("Microsoft sign-in was declined.");
-                    if ("expired_token".equals(error) || "code_expired".equals(error)) throw new Exception("The sign-in code expired. Start again to get a new code.");
-                    throw new Exception(response.optString("error_description",
-                        error.isEmpty() ? "Microsoft sign-in did not complete." : error));
+                String verifier = decryptKey(encryptedVerifier);
+                Map<String, String> values = new HashMap<>();
+                values.put("client_id", clientId);
+                values.put("grant_type", "authorization_code");
+                values.put("code", code);
+                values.put("redirect_uri", ONEDRIVE_REDIRECT_URI);
+                values.put("code_verifier", verifier);
+                values.put("scope", ONEDRIVE_SCOPE);
+                JSONObject token = postMicrosoftForm(MICROSOFT_CONSUMERS + "token", values);
+                if (token.has("error")) {
+                    throw new Exception(token.optString("error_description", token.optString("error")));
                 }
-                if (oneDriveLoginCancelled) throw new Exception("Sign-in cancelled.");
-                if (token == null) throw new Exception("The Microsoft sign-in code expired. Please try again.");
+                if (token.optString("access_token", "").isEmpty()) {
+                    throw new Exception("Microsoft didn't return an access token. Check that the app registration uses the redirect URI aiomniverse://auth.");
+                }
                 saveMicrosoftTokens(token, clientId);
                 completeOneDriveSignIn(token.optString("access_token", ""), waiting);
             } catch (Exception e) {
                 String error = safeError(e);
                 runOnUiThread(() -> {
                     if (waiting.isShowing()) waiting.dismiss();
-                    if (!oneDriveLoginCancelled) showOneDriveAuthError("Microsoft sign-in didn't finish", error);
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ONEDRIVE_LAST_ERROR_PREF, error).apply();
+                    updateCloudBackupStatus();
+                    showOneDriveAuthError("Couldn't connect OneDrive", error
+                        + "\n\nYour local chats are safe. Check the one-time Microsoft setup and try again.");
                 });
             }
         });
