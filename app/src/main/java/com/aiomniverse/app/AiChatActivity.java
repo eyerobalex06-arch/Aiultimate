@@ -17,6 +17,7 @@ import android.view.inputmethod.EditorInfo;
 import android.net.Uri;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.PopupMenu;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -146,6 +147,11 @@ public class AiChatActivity extends Activity {
         statusChip.setPadding(dp(10), dp(7), dp(10), dp(7));
         statusChip.setBackground(round(Color.rgb(39, 30, 67), 16));
         toolbar.addView(statusChip);
+        Button keyMenu = button("⋮", Color.TRANSPARENT);
+        keyMenu.setTextSize(20);
+        keyMenu.setContentDescription("API key options");
+        toolbar.addView(keyMenu, new LinearLayout.LayoutParams(dp(42), dp(44)));
+        keyMenu.setOnClickListener(v -> showApiKeyMenu(v));
         root.addView(toolbar);
 
         ScrollView page = new ScrollView(this);
@@ -238,8 +244,23 @@ public class AiChatActivity extends Activity {
         messagesScroll.setFillViewport(false);
         messagesScroll.setBackground(round(Color.rgb(12, 15, 26), 16));
         messagesScroll.addView(messagesColumn, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams messagesParams = new LinearLayout.LayoutParams(-1, dp(280));
+        LinearLayout.LayoutParams messagesParams = new LinearLayout.LayoutParams(-1, 0, 1);
         body.addView(messagesScroll, messagesParams);
+
+        LinearLayout conversationControls = new LinearLayout(this);
+        conversationControls.setOrientation(LinearLayout.HORIZONTAL);
+        conversationControls.setGravity(Gravity.CENTER_VERTICAL);
+        Button toTop = button("↑ TOP", Color.rgb(35, 38, 57));
+        Button toBottom = button("↓ BOTTOM", Color.rgb(35, 38, 57));
+        conversationControls.addView(toTop, new LinearLayout.LayoutParams(0, dp(38), 1));
+        LinearLayout.LayoutParams bottomParams = new LinearLayout.LayoutParams(0, dp(38), 1);
+        bottomParams.leftMargin = dp(8);
+        conversationControls.addView(toBottom, bottomParams);
+        LinearLayout.LayoutParams controlsParams = new LinearLayout.LayoutParams(-1, -2);
+        controlsParams.topMargin = dp(6);
+        body.addView(conversationControls, controlsParams);
+        toTop.setOnClickListener(v -> messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_UP)));
+        toBottom.setOnClickListener(v -> messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_DOWN)));
 
         Button clearChat = button("CLEAR CONVERSATION", Color.rgb(35, 38, 57));
         clearChat.setTextColor(MUTED);
@@ -299,21 +320,35 @@ public class AiChatActivity extends Activity {
             forgetButton.setEnabled(false);
         } else {
             Provider p = providers.get(currentProviderIndex - 1);
-            String savedKeyName = getPreferences(KEY_NAME_PREFIX + p.id, "");
+            String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
+            String savedKeyName = getSavedNameForModel(p, model);
             providerInfo.setText(p.label + (savedKeyName.isEmpty() ? "" : "  •  Saved as: " + savedKeyName)
-                + "  •  Tap here or GET FREE KEY to open its official key page. Provider quotas and availability apply.");
+                + "  •  Keys are stored separately for each model ID.");
             keyNameInput.setEnabled(true);
-            keyNameInput.setHint("Name this key (e.g. My " + p.label + " Key)");
+            keyNameInput.setHint("Name this model key");
             keyNameInput.setText(savedKeyName.isEmpty() ? "My " + p.label + " Key" : savedKeyName);
-            modelInput.setHint("Model ID (editable)");
+            modelInput.setHint("Model ID (each model has its own key)");
             modelInput.setEnabled(true);
             keyInput.setEnabled(true);
             saveButton.setEnabled(true);
             forgetButton.setEnabled(true);
-            modelInput.setText(getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel));
-            try { keyInput.setText(decryptKey(getPreferences(KEY_PREFIX + p.id, ""))); }
+            modelInput.setText(model);
+            try { keyInput.setText(decryptKey(getSavedKeyForModel(p, model))); }
             catch (Exception e) { keyInput.setText(""); }
-            keyInput.setHint("Paste API key for " + p.label);
+            keyInput.setHint("Paste API key for this model");
+            modelInput.setOnFocusChangeListener((view, hasFocus) -> {
+                if (!hasFocus && currentProviderIndex > 0) {
+                    Provider selected = providers.get(currentProviderIndex - 1);
+                    String selectedModel = modelInput.getText().toString().trim();
+                    if (!selectedModel.isEmpty()) {
+                        String savedName = getSavedNameForModel(selected, selectedModel);
+                        keyNameInput.setText(savedName.isEmpty() ? "My " + selected.label + " Key" : savedName);
+                        try { keyInput.setText(decryptKey(getSavedKeyForModel(selected, selectedModel))); }
+                        catch (Exception ignored) { keyInput.setText(""); }
+                        keyInput.setHint("Paste API key for this model");
+                    }
+                }
+            });
         }
         updateConnectionStatus();
     }
@@ -326,6 +361,27 @@ public class AiChatActivity extends Activity {
         return getSharedPreferences(PREFS, MODE_PRIVATE).getString(key, fallback);
     }
 
+    private String modelKeySuffix(Provider provider, String model) {
+        String value = model == null ? "" : model.trim();
+        String encoded = Base64.encodeToString(value.getBytes(StandardCharsets.UTF_8),
+            Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+        return provider.id + "_" + (encoded.isEmpty() ? "default" : encoded);
+    }
+    private String getSavedKeyForModel(Provider provider, String model) {
+        String value = getPreferences(KEY_PREFIX + modelKeySuffix(provider, model), "");
+        if (value.isEmpty() && model.equals(getPreferences(MODEL_KEY_PREFIX + provider.id, provider.defaultModel))) {
+            value = getPreferences(KEY_PREFIX + provider.id, "");
+        }
+        return value;
+    }
+    private String getSavedNameForModel(Provider provider, String model) {
+        String value = getPreferences(KEY_NAME_PREFIX + modelKeySuffix(provider, model), "");
+        if (value.isEmpty() && model.equals(getPreferences(MODEL_KEY_PREFIX + provider.id, provider.defaultModel))) {
+            value = getPreferences(KEY_NAME_PREFIX + provider.id, "");
+        }
+        return value;
+    }
+
     private void saveCurrentKey() {
         if (currentProviderIndex == 0) return;
         Provider p = providers.get(currentProviderIndex - 1);
@@ -335,18 +391,23 @@ public class AiChatActivity extends Activity {
         if (keyName.isEmpty()) keyName = "My " + p.label + " Key";
         if (keyName.length() > 60) keyName = keyName.substring(0, 60);
         try {
+            if (model.isEmpty()) model = p.defaultModel;
+            String keyPreference = KEY_PREFIX + modelKeySuffix(p, model);
+            String namePreference = KEY_NAME_PREFIX + modelKeySuffix(p, model);
+            String existingKey = getSavedKeyForModel(p, model);
             android.content.SharedPreferences.Editor editor = getSharedPreferences(PREFS, MODE_PRIVATE).edit();
-            if (!key.isEmpty()) editor.putString(KEY_PREFIX + p.id, encryptKey(key));
-            else if (getPreferences(KEY_PREFIX + p.id, "").isEmpty()) {
-                Toast.makeText(this, "Paste an API key first. It is saved only on this device.", Toast.LENGTH_LONG).show();
+            if (!key.isEmpty()) editor.putString(keyPreference, encryptKey(key));
+            else if (existingKey.isEmpty()) {
+                Toast.makeText(this, "Paste an API key for this model first. It is saved only on this device.", Toast.LENGTH_LONG).show();
                 return;
             }
-            editor.putString(KEY_NAME_PREFIX + p.id, keyName);
-            editor.putString(MODEL_KEY_PREFIX + p.id, model.isEmpty() ? p.defaultModel : model).apply();
+            editor.putString(namePreference, keyName);
+            editor.putString(MODEL_KEY_PREFIX + p.id, model);
+            editor.remove(KEY_PREFIX + p.id).remove(KEY_NAME_PREFIX + p.id).apply();
             keyInput.setText("");
-            keyInput.setHint("Key saved encrypted. Paste again only to replace it.");
-            providerInfo.setText(p.label + "  •  Saved as: " + keyName + "  •  Key stored encrypted on this device.");
-            Toast.makeText(this, "Saved '" + keyName + "'. It will be available to chat and Auto-switch until you replace or forget it. Provider outages and limits still apply.", Toast.LENGTH_LONG).show();
+            keyInput.setHint("Saved securely for model: " + model);
+            providerInfo.setText(p.label + "  •  " + model + "  •  Saved as: " + keyName + "  •  Encrypted on this device.");
+            Toast.makeText(this, "Saved '" + keyName + "' for model " + model + ". Other model keys stay separate.", Toast.LENGTH_LONG).show();
             updateConnectionStatus();
         } catch (Exception e) {
             Toast.makeText(this, "Could not save settings: " + safeError(e), Toast.LENGTH_LONG).show();
@@ -356,15 +417,50 @@ public class AiChatActivity extends Activity {
     private void forgetCurrentKey() {
         if (currentProviderIndex == 0) return;
         Provider p = providers.get(currentProviderIndex - 1);
+        String model = modelInput.getText().toString().trim();
+        if (model.isEmpty()) model = p.defaultModel;
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .remove(KEY_PREFIX + modelKeySuffix(p, model))
+            .remove(KEY_NAME_PREFIX + modelKeySuffix(p, model))
             .remove(KEY_PREFIX + p.id)
             .remove(KEY_NAME_PREFIX + p.id)
             .apply();
         keyInput.setText("");
         keyNameInput.setText("My " + p.label + " Key");
-        providerInfo.setText(p.label + "  •  Key removed from this device.");
+        providerInfo.setText(p.label + "  •  Key for model " + model + " removed from this device.");
         Toast.makeText(this, p.label + " key forgotten.", Toast.LENGTH_SHORT).show();
         updateConnectionStatus();
+    }
+
+
+    private void showApiKeyMenu(View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Add / change API key").setOnMenuItemClickListener(item -> {
+            providerSpinner.setSelection(1);
+            Toast.makeText(this, "Choose a provider and model, paste the key, then tap SAVE KEY.", Toast.LENGTH_LONG).show();
+            return true;
+        });
+        android.view.SubMenu keyLinks = menu.getMenu().addSubMenu("Get API key from provider");
+        for (Provider provider : providers) {
+            keyLinks.add(provider.label).setOnMenuItemClickListener(item -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(provider.keyUrl))); }
+                catch (Exception e) { Toast.makeText(this, "Couldn't open the provider website.", Toast.LENGTH_SHORT).show(); }
+                return true;
+            });
+        }
+        menu.getMenu().add("Delete this model's API key").setOnMenuItemClickListener(item -> {
+            forgetCurrentKey();
+            return true;
+        });
+        menu.getMenu().add("Scroll conversation to top").setOnMenuItemClickListener(item -> {
+            messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_UP));
+            return true;
+        });
+        menu.getMenu().add("Scroll conversation to bottom").setOnMenuItemClickListener(item -> {
+            messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_DOWN));
+            return true;
+        });
+        menu.show();
     }
 
     private void openProviderSetup() {
@@ -387,7 +483,8 @@ public class AiChatActivity extends Activity {
         int connected = 0;
         for (Provider p : providers) {
             try {
-                String encrypted = getPreferences(KEY_PREFIX + p.id, "");
+                String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
+                String encrypted = getSavedKeyForModel(p, model);
                 if (!encrypted.isEmpty() && !decryptKey(encrypted).trim().isEmpty()) connected++;
             } catch (Exception ignored) {}
         }
@@ -414,9 +511,9 @@ public class AiChatActivity extends Activity {
             } else {
                 for (Provider p : order) {
                     try {
-                        String key = decryptKey(getPreferences(KEY_PREFIX + p.id, ""));
-                        if (key.trim().isEmpty()) continue;
                         String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
+                        String key = decryptKey(getSavedKeyForModel(p, model));
+                        if (key.trim().isEmpty()) continue;
                         answer = requestProvider(p, key, model, history);
                         source = p.label + " · " + model;
                         break;
@@ -448,7 +545,8 @@ public class AiChatActivity extends Activity {
         List<Provider> configured = new ArrayList<>();
         for (Provider p : providers) {
             try {
-                String key = decryptKey(getPreferences(KEY_PREFIX + p.id, ""));
+                String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
+                String key = decryptKey(getSavedKeyForModel(p, model));
                 if (!key.trim().isEmpty()) configured.add(p);
             } catch (Exception ignored) {}
         }
