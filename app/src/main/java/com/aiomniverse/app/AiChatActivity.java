@@ -785,6 +785,7 @@ public class AiChatActivity extends Activity {
             providerInfo.setText(p.label + "  •  " + model + "  •  Saved as: " + keyName + "  •  Encrypted on this device.");
             Toast.makeText(this, "Saved '" + keyName + "' for model " + model + ". Other model keys stay separate.", Toast.LENGTH_LONG).show();
             updateConnectionStatus();
+            updateModelPickerLabel();
         } catch (Exception e) {
             Toast.makeText(this, "Could not save settings: " + safeError(e), Toast.LENGTH_LONG).show();
         }
@@ -806,6 +807,7 @@ public class AiChatActivity extends Activity {
         providerInfo.setText(p.label + "  •  Key for model " + model + " removed from this device.");
         Toast.makeText(this, p.label + " key forgotten.", Toast.LENGTH_SHORT).show();
         updateConnectionStatus();
+        updateModelPickerLabel();
     }
 
 
@@ -1138,13 +1140,14 @@ public class AiChatActivity extends Activity {
         bubble.setPadding(role.equals("user") ? dp(13) : dp(2), dp(9), role.equals("user") ? dp(13) : dp(2), dp(9));
         if (role.equals("user")) bubble.setBackground(round(Color.rgb(49, 44, 76), 20));
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        bubble.setMaxWidth(Math.max(dp(220), screenWidth - dp(role.equals("user") ? 100 : 52)));
+        int bubbleMaxWidth = Math.max(dp(220), screenWidth - dp(role.equals("user") ? 100 : 52));
 
         TextView who = text(role.equals("user") ? "YOU" : "✦  " + (source.isEmpty() ? "AI" : source), 9,
             role.equals("user") ? Color.rgb(221, 214, 254) : PURPLE, true);
         bubble.addView(who);
         TextView content = text(body, 14, WHITE, false);
         content.setTextIsSelectable(true);
+        content.setMaxWidth(bubbleMaxWidth);
         content.setLineSpacing(dp(2), 1.0f);
         LinearLayout.LayoutParams contentParams = new LinearLayout.LayoutParams(-2, -2);
         contentParams.topMargin = dp(5);
