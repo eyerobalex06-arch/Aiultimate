@@ -1,33 +1,41 @@
 name: Build Android APK
+
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
+
 permissions:
   contents: write
-  actions: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-      - name: Install Android platform and build tools
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+        with:
+          packages: 'platforms;android-35,build-tools;35.0.0'
+
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
-      - name: Upload APK
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug --stacktrace
+
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
           name: AI-OMNIVERSE-debug-apk
@@ -35,16 +43,16 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish latest installable APK to GitHub Releases
+      - name: Publish APK to latest release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-build
           target_commitish: ${{ github.sha }}
           name: AI OMNIVERSE Latest Build
           body: |
-            Automatically built debug APK for testing on Android.
-
-            This build is not a Play Store release. The app currently provides a searchable model directory and strength labels; live AI chat providers are not connected yet.
+            Debug APK for testing on Android.
+            Current version: searchable AI model directory with skill labels.
+            Live AI provider integrations are not connected yet.
           files: app/build/outputs/apk/debug/app-debug.apk
           update_tag: true
           make_latest: true
