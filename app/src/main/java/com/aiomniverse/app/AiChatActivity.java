@@ -881,10 +881,13 @@ public class AiChatActivity extends Activity {
         });
         try {
             backupExecutor.execute(() -> {
-                try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
-                    if (output == null) throw new Exception("No output stream for the backup file.");
-                    output.write(snapshot.getBytes(StandardCharsets.UTF_8));
-                    output.flush();
+                try {
+                    try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
+                        if (output == null) throw new Exception("No output stream for the backup file.");
+                        output.write(snapshot.getBytes(StandardCharsets.UTF_8));
+                        output.flush();
+                    }
+                    // Mark synced only after the provider's output stream has closed successfully.
                     lastBackupError = "";
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                         .putLong(ONEDRIVE_LAST_SYNC_PREF, System.currentTimeMillis())
