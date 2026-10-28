@@ -44,6 +44,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -54,6 +57,11 @@ import android.util.Base64;
 public class AiChatActivity extends Activity {
     private static final String PREFS = "ai_omniverse_private";
     private static final String KEY_ALIAS = "ai_omniverse_provider_key_v1";
+    private static final String CHAT_HISTORY_PREF = "saved_conversations_json";
+    private static final String ACTIVE_CHAT_PREF = "active_chat_id";
+    private static final String ONEDRIVE_BACKUP_URI_PREF = "onedrive_backup_uri";
+    private static final int REQUEST_CREATE_BACKUP = 7101;
+    private static final int REQUEST_RESTORE_BACKUP = 7102;
     private static final int BG = Color.rgb(9, 11, 20);
     private static final int PANEL = Color.rgb(19, 22, 37);
     private static final int WHITE = Color.rgb(245, 247, 255);
@@ -82,6 +90,8 @@ public class AiChatActivity extends Activity {
     private EditText messageInput;
     private TextView providerInfo;
     private TextView connectionStatus;
+    private Button modelPicker;
+    private LinearLayout configPanel;
     private LinearLayout messagesColumn;
     private ScrollView messagesScroll;
     private Button saveButton;
@@ -90,6 +100,10 @@ public class AiChatActivity extends Activity {
     private int currentProviderIndex = 0;
     private boolean busy = false;
     private final List<ChatMessage> history = new ArrayList<>();
+    private final List<SavedChat> savedChats = new ArrayList<>();
+    private String activeChatId = "";
+    private volatile String lastBackupError = "";
+    private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
     private static class Provider {
         final String id, label, endpoint, keyUrl, defaultModel;
@@ -97,6 +111,16 @@ public class AiChatActivity extends Activity {
         Provider(String id, String label, String endpoint, String keyUrl, String defaultModel, boolean gemini) {
             this.id = id; this.label = label; this.endpoint = endpoint; this.keyUrl = keyUrl;
             this.defaultModel = defaultModel; this.gemini = gemini;
+        }
+    }
+
+    private static class SavedChat {
+        String id;
+        String title;
+        long updatedAt;
+        final List<ChatMessage> messages = new ArrayList<>();
+        SavedChat(String id, String title, long updatedAt) {
+            this.id = id; this.title = title; this.updatedAt = updatedAt;
         }
     }
 
@@ -113,17 +137,24 @@ public class AiChatActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         buildUi();
+        loadSavedChats();
+        String lastActiveId = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ACTIVE_CHAT_PREF, "");
+        SavedChat lastActive = findSavedChat(lastActiveId);
+        if (lastActive == null && !savedChats.isEmpty()) lastActive = savedChats.get(0);
+        if (lastActive != null) restoreChat(lastActive, false);
+        else startNewChat(false);
+
         if (getIntent().getBooleanExtra("open_key_setup", false)) {
-            // Start directly on a real provider so the key field is enabled immediately.
+            configPanel.setVisibility(View.VISIBLE);
             providerSpinner.setSelection(1);
             new AlertDialog.Builder(this)
-                .setTitle("Add an API key")
-                .setMessage("Choose a provider from PROVIDER ROUTER, paste your key into the API key field, then tap SAVE KEY. Use GET FREE KEY to open that provider's official site. Your saved key is encrypted on this device.")
+                .setTitle("Connect an AI provider")
+                .setMessage("Choose a provider, create a key on its official site with GET KEY, then return and save it here. You can add keys for multiple model providers. Keys stay encrypted on this device.")
                 .setPositiveButton("GOT IT", (dialog, which) -> dialog.dismiss())
                 .show();
         }
-        addMessage("assistant", "Welcome to AI OMNIVERSE cloud chat. The app itself does not impose a daily message quota. Add multiple free-tier provider keys and Auto-switch will try other configured providers when one fails or is rate-limited. Real usage is still limited by each provider’s quotas, model access, account rules, and availability, which can change. This cannot guarantee uninterrupted or unlimited cloud usage. Your keys are encrypted on this device; messages are sent to the provider that answers.", "AI OMNIVERSE");
         updateConnectionStatus();
+        updateModelPickerLabel();
     }
 
     private void buildUi() {
@@ -133,101 +164,113 @@ public class AiChatActivity extends Activity {
 
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.setPadding(dp(12), dp(6), dp(16), dp(6));
-        toolbar.setBackgroundColor(PANEL);
-        Button back = button("‹  BACK", Color.TRANSPARENT);
-        back.setTextColor(WHITE);
-        back.setOnClickListener(v -> finish());
-        toolbar.addView(back, new LinearLayout.LayoutParams(dp(84), dp(44)));
+        toolbar.setPadding(dp(10), dp(5), dp(10), dp(5));
+        toolbar.setBackgroundColor(BG);
+
+        Button newChatButton = button("＋", Color.TRANSPARENT);
+        newChatButton.setTextSize(22);
+        newChatButton.setContentDescription("Start a new chat");
+        toolbar.addView(newChatButton, new LinearLayout.LayoutParams(dp(44), dp(46)));
+        newChatButton.setOnClickListener(v -> startNewChat(true));
+
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        TextView title = text("AI OMNIVERSE", 15, WHITE, true);
-        TextView sub = text("MULTI-PROVIDER CHAT", 10, PURPLE, true);
-        titleBox.addView(title);
-        titleBox.addView(sub);
+        titleBox.setPadding(dp(4), 0, 0, 0);
+        titleBox.addView(text("AI OMNIVERSE", 16, WHITE, true));
+        titleBox.addView(text("Your AI workspace", 10, MUTED, false));
         toolbar.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView statusChip = text("FREE TIERS", 10, PURPLE, true);
-        statusChip.setPadding(dp(10), dp(7), dp(10), dp(7));
-        statusChip.setBackground(round(Color.rgb(39, 30, 67), 16));
-        toolbar.addView(statusChip);
+
         Button keyMenu = button("⋮", Color.TRANSPARENT);
-        keyMenu.setTextSize(20);
-        keyMenu.setContentDescription("API key options");
-        toolbar.addView(keyMenu, new LinearLayout.LayoutParams(dp(42), dp(44)));
+        keyMenu.setTextSize(22);
+        keyMenu.setContentDescription("Chat options");
+        toolbar.addView(keyMenu, new LinearLayout.LayoutParams(dp(42), dp(46)));
         keyMenu.setOnClickListener(v -> showApiKeyMenu(v));
         root.addView(toolbar);
 
-        ScrollView page = new ScrollView(this);
-        page.setFillViewport(false);
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(14), dp(12), dp(14), dp(8));
+        View hairline = new View(this);
+        hairline.setBackgroundColor(Color.rgb(37, 40, 55));
+        root.addView(hairline, new LinearLayout.LayoutParams(-1, dp(1)));
 
-        LinearLayout config = new LinearLayout(this);
-        config.setOrientation(LinearLayout.VERTICAL);
-        config.setPadding(dp(14), dp(13), dp(14), dp(12));
-        config.setBackground(round(PANEL, 18));
-        body.addView(config, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout modelBar = new LinearLayout(this);
+        modelBar.setGravity(Gravity.CENTER_VERTICAL);
+        modelBar.setPadding(dp(14), dp(7), dp(14), dp(7));
+        modelPicker = button("Auto-switch · all connected models  ▾", Color.rgb(25, 28, 43));
+        modelPicker.setTextSize(12);
+        modelPicker.setTextColor(WHITE);
+        modelPicker.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        modelPicker.setPadding(dp(14), 0, dp(14), 0);
+        modelBar.addView(modelPicker, new LinearLayout.LayoutParams(-1, dp(44)));
+        modelPicker.setOnClickListener(v -> showModelPicker());
+        root.addView(modelBar);
 
-        config.addView(text("PROVIDER ROUTER", 11, PURPLE, true));
+        configPanel = new LinearLayout(this);
+        configPanel.setOrientation(LinearLayout.VERTICAL);
+        configPanel.setPadding(dp(13), dp(10), dp(13), dp(10));
+        configPanel.setBackground(round(PANEL, 16));
+        configPanel.setVisibility(View.GONE);
+
+        TextView configHeading = text("PROVIDER & API KEY SETTINGS", 11, PURPLE, true);
+        configPanel.addView(configHeading);
+
         providerSpinner = new Spinner(this);
         List<String> providerNames = new ArrayList<>();
-        providerNames.add("Auto-switch (all saved free providers)");
+        providerNames.add("Auto-switch (all saved providers)");
         for (Provider p : providers) providerNames.add(p.label);
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, providerNames);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         providerSpinner.setAdapter(adapter);
-        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(-1, dp(48));
-        spinnerParams.topMargin = dp(6);
-        config.addView(providerSpinner, spinnerParams);
+        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(-1, dp(44));
+        spinnerParams.topMargin = dp(5);
+        configPanel.addView(providerSpinner, spinnerParams);
 
         providerInfo = text("", 11, MUTED, false);
         LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(-1, -2);
         infoParams.topMargin = dp(5);
-        config.addView(providerInfo, infoParams);
-        providerInfo.setOnClickListener(v -> openProviderSetup());
+        configPanel.addView(providerInfo, infoParams);
+        providerInfo.setOnClickListener(v -> showProviderChooserForKey());
 
-        keyNameInput = input("Name this key (e.g. My OpenRouter Key)", false);
-        LinearLayout.LayoutParams keyNameParams = new LinearLayout.LayoutParams(-1, dp(46));
-        keyNameParams.topMargin = dp(9);
-        config.addView(keyNameInput, keyNameParams);
+        keyNameInput = input("Name this key", false);
+        LinearLayout.LayoutParams keyNameParams = new LinearLayout.LayoutParams(-1, dp(42));
+        keyNameParams.topMargin = dp(7);
+        configPanel.addView(keyNameInput, keyNameParams);
 
-        modelInput = input("Model ID (provider default)", false);
-        LinearLayout.LayoutParams modelParams = new LinearLayout.LayoutParams(-1, dp(46));
-        modelParams.topMargin = dp(9);
-        config.addView(modelInput, modelParams);
+        modelInput = input("Model ID", false);
+        LinearLayout.LayoutParams modelParams = new LinearLayout.LayoutParams(-1, dp(42));
+        modelParams.topMargin = dp(6);
+        configPanel.addView(modelInput, modelParams);
 
         keyInput = input("Paste this provider's API key", true);
-        LinearLayout.LayoutParams keyParams = new LinearLayout.LayoutParams(-1, dp(46));
-        keyParams.topMargin = dp(8);
-        config.addView(keyInput, keyParams);
+        LinearLayout.LayoutParams keyParams = new LinearLayout.LayoutParams(-1, dp(42));
+        keyParams.topMargin = dp(6);
+        configPanel.addView(keyInput, keyParams);
 
         LinearLayout configButtons = new LinearLayout(this);
         configButtons.setOrientation(LinearLayout.HORIZONTAL);
         configButtons.setGravity(Gravity.CENTER_VERTICAL);
         saveButton = button("SAVE KEY", Color.rgb(91, 70, 164));
-        forgetButton = button("FORGET KEY", Color.rgb(44, 47, 70));
-        Button getKeyButton = button("GET FREE KEY ↗", Color.rgb(44, 47, 70));
-        configButtons.addView(saveButton, new LinearLayout.LayoutParams(0, dp(42), 1));
-        LinearLayout.LayoutParams forgetParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        forgetButton = button("DELETE KEY", Color.rgb(44, 47, 70));
+        Button getKeyButton = button("GET KEY ↗", Color.rgb(44, 47, 70));
+        configButtons.addView(saveButton, new LinearLayout.LayoutParams(0, dp(40), 1));
+        LinearLayout.LayoutParams forgetParams = new LinearLayout.LayoutParams(0, dp(40), 1);
         forgetParams.leftMargin = dp(6);
         configButtons.addView(forgetButton, forgetParams);
-        LinearLayout.LayoutParams getParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        LinearLayout.LayoutParams getParams = new LinearLayout.LayoutParams(0, dp(40), 1);
         getParams.leftMargin = dp(6);
         configButtons.addView(getKeyButton, getParams);
         LinearLayout.LayoutParams buttonsParams = new LinearLayout.LayoutParams(-1, -2);
-        buttonsParams.topMargin = dp(8);
-        config.addView(configButtons, buttonsParams);
+        buttonsParams.topMargin = dp(6);
+        configPanel.addView(configButtons, buttonsParams);
 
         connectionStatus = text("", 10, MUTED, false);
         LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
-        statusParams.topMargin = dp(7);
-        config.addView(connectionStatus, statusParams);
+        statusParams.topMargin = dp(5);
+        configPanel.addView(connectionStatus, statusParams);
 
         providerSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 currentProviderIndex = position;
                 refreshProviderForm();
+                updateModelPickerLabel();
             }
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
         });
@@ -235,76 +278,68 @@ public class AiChatActivity extends Activity {
         forgetButton.setOnClickListener(v -> forgetCurrentKey());
         getKeyButton.setOnClickListener(v -> showProviderChooserForKey());
 
-        TextView chatLabel = text("CONVERSATION", 11, WHITE, true);
-        LinearLayout.LayoutParams chatLabelParams = new LinearLayout.LayoutParams(-1, -2);
-        chatLabelParams.topMargin = dp(14);
-        chatLabelParams.bottomMargin = dp(7);
-        body.addView(chatLabel, chatLabelParams);
+        root.addView(configPanel, new LinearLayout.LayoutParams(-1, -2));
 
         messagesColumn = new LinearLayout(this);
         messagesColumn.setOrientation(LinearLayout.VERTICAL);
+        messagesColumn.setPadding(dp(13), dp(10), dp(13), dp(18));
         messagesScroll = new ScrollView(this);
-        messagesScroll.setFillViewport(false);
-        messagesScroll.setBackground(round(Color.rgb(12, 15, 26), 16));
+        messagesScroll.setFillViewport(true);
+        messagesScroll.setClipToPadding(false);
+        messagesScroll.setVerticalScrollBarEnabled(false);
+        messagesScroll.setBackgroundColor(BG);
         messagesScroll.addView(messagesColumn, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams messagesParams = new LinearLayout.LayoutParams(-1, dp(280));
-        body.addView(messagesScroll, messagesParams);
-
-        LinearLayout conversationControls = new LinearLayout(this);
-        conversationControls.setOrientation(LinearLayout.HORIZONTAL);
-        conversationControls.setGravity(Gravity.CENTER_VERTICAL);
-        Button toTop = button("↑ TOP", Color.rgb(35, 38, 57));
-        Button toBottom = button("↓ BOTTOM", Color.rgb(35, 38, 57));
-        conversationControls.addView(toTop, new LinearLayout.LayoutParams(0, dp(38), 1));
-        LinearLayout.LayoutParams bottomParams = new LinearLayout.LayoutParams(0, dp(38), 1);
-        bottomParams.leftMargin = dp(8);
-        conversationControls.addView(toBottom, bottomParams);
-        LinearLayout.LayoutParams controlsParams = new LinearLayout.LayoutParams(-1, -2);
-        controlsParams.topMargin = dp(6);
-        body.addView(conversationControls, controlsParams);
-        toTop.setOnClickListener(v -> messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_UP)));
-        toBottom.setOnClickListener(v -> messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_DOWN)));
-
-        Button clearChat = button("CLEAR CONVERSATION", Color.rgb(35, 38, 57));
-        clearChat.setTextColor(MUTED);
-        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, dp(36));
-        clearParams.topMargin = dp(7);
-        body.addView(clearChat, clearParams);
-        clearChat.setOnClickListener(v -> new AlertDialog.Builder(this)
-            .setTitle("Clear this conversation?")
-            .setMessage("This clears the messages from this chat screen.")
-            .setNegativeButton("KEEP", (d, w) -> d.dismiss())
-            .setPositiveButton("CLEAR", (d, w) -> {
-                history.clear();
-                messagesColumn.removeAllViews();
-                addMessage("assistant", "Conversation cleared. Your provider keys are unchanged.", "AI OMNIVERSE");
-            }).show());
-
-        page.addView(body);
-        root.addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
+        root.addView(messagesScroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout composer = new LinearLayout(this);
         composer.setGravity(Gravity.CENTER_VERTICAL);
         composer.setPadding(dp(10), dp(8), dp(10), dp(8));
-        composer.setBackgroundColor(PANEL);
-        messageInput = input("Ask anything...", false);
-        messageInput.setMinHeight(dp(48));
+        composer.setBackgroundColor(BG);
+
+        Button plusButton = button("＋", Color.rgb(31, 34, 50));
+        plusButton.setTextSize(20);
+        plusButton.setContentDescription("Chat tools");
+        LinearLayout.LayoutParams plusParams = new LinearLayout.LayoutParams(dp(42), dp(48));
+        plusParams.rightMargin = dp(7);
+        composer.addView(plusButton, plusParams);
+        plusButton.setOnClickListener(v -> {
+            PopupMenu tools = new PopupMenu(this, v);
+            tools.getMenu().add("New chat").setOnMenuItemClickListener(item -> { startNewChat(true); return true; });
+            tools.getMenu().add("Manage API keys").setOnMenuItemClickListener(item -> { showKeySettings(); return true; });
+            tools.getMenu().add("Back up chats to OneDrive").setOnMenuItemClickListener(item -> { chooseBackupFile(); return true; });
+            tools.show();
+        });
+
+        messageInput = input("Message AI OMNIVERSE", false);
         messageInput.setSingleLine(false);
-        messageInput.setMaxLines(4);
+        messageInput.setMinHeight(dp(48));
+        messageInput.setMaxLines(5);
         messageInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
+        messageInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        messageInput.setBackground(round(Color.rgb(27, 30, 44), 23));
+        messageInput.setPadding(dp(15), dp(9), dp(15), dp(9));
         messageInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); return true; }
             return false;
         });
         composer.addView(messageInput, new LinearLayout.LayoutParams(0, -2, 1));
-        sendButton = button("SEND  ➤", Color.rgb(126, 87, 194));
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(92), dp(48));
+
+        sendButton = button("↑", Color.rgb(245, 247, 255));
+        sendButton.setTextColor(Color.rgb(20, 22, 32));
+        sendButton.setTextSize(20);
+        sendButton.setContentDescription("Send message");
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(46), dp(46));
         sendParams.leftMargin = dp(7);
         composer.addView(sendButton, sendParams);
         sendButton.setOnClickListener(v -> sendMessage());
         root.addView(composer);
-        // Android 15+ draws edge-to-edge by default. Keep the composer above
-        // the system navigation gesture area while letting the keyboard resize the screen.
+
+        TextView footer = text("AI can make mistakes. Check important information.", 9, Color.rgb(115, 122, 145), false);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(dp(6), 0, dp(6), dp(5));
+        root.addView(footer);
+
+        // Android 15+ edge-to-edge support: the composer stays clear of the gesture area.
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             int navigationBottom = android.os.Build.VERSION.SDK_INT >= 30
                 ? insets.getInsets(WindowInsets.Type.navigationBars()).bottom
@@ -314,6 +349,8 @@ public class AiChatActivity extends Activity {
         });
         setContentView(root);
         root.requestApplyInsets();
+        renderWelcome();
+        updateModelPickerLabel();
     }
 
     private void refreshProviderForm() {
