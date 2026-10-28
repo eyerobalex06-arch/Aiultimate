@@ -104,7 +104,7 @@ public class AiChatActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         buildUi();
-        addMessage("assistant", "Welcome to AI OMNIVERSE cloud chat. Add free-tier provider keys to connect. Auto-switch retries other configured providers when one fails or is rate-limited. Important: free quotas, model access, and availability are controlled by each provider and can change. This app does not promise unlimited cloud usage. Your keys are encrypted on this device; messages are sent to the provider that answers.", "AI OMNIVERSE");
+        addMessage("assistant", "Welcome to AI OMNIVERSE cloud chat. The app itself does not impose a daily message quota. Add multiple free-tier provider keys and Auto-switch will try other configured providers when one fails or is rate-limited. Real usage is still limited by each provider’s quotas, model access, account rules, and availability, which can change. This cannot guarantee uninterrupted or unlimited cloud usage. Your keys are encrypted on this device; messages are sent to the provider that answers.", "AI OMNIVERSE");
         updateConnectionStatus();
     }
 
@@ -266,7 +266,7 @@ public class AiChatActivity extends Activity {
     private void refreshProviderForm() {
         boolean auto = currentProviderIndex == 0;
         if (auto) {
-            providerInfo.setText("Tries saved providers in order and falls back after errors or rate limits. Free quotas, account rules, and availability still apply; switching providers does not bypass limits. Select a provider below to add its key.");
+            providerInfo.setText("No app-set daily message quota. Tries every saved provider in order and falls back after errors or rate limits. Free quotas, account rules, and availability still apply; switching providers does not bypass limits. Add as many eligible free-provider accounts as their terms permit.");
             modelInput.setText("");
             modelInput.setHint("Auto mode chooses each provider's saved model");
             keyInput.setText("");
@@ -333,7 +333,7 @@ public class AiChatActivity extends Activity {
         if (currentProviderIndex == 0) {
             new AlertDialog.Builder(this)
                 .setTitle("Connect free AI providers")
-                .setMessage("Choose OpenRouter, Gemini, Groq, or Cerebras, then tap GET FREE KEY. Add multiple provider keys and choose Auto-switch to try alternatives after an error. Free plans have provider-specific quotas and model restrictions; availability can change, and auto-switching cannot guarantee uninterrupted or unlimited use. Do not enable paid billing unless you intentionally want to pay.")
+                .setMessage("Choose OpenRouter, Gemini, Groq, or Cerebras, then tap GET FREE KEY. The app has no daily message quota of its own. Add multiple eligible free-provider keys and choose Auto-switch to try alternatives after errors or rate limits. Provider quotas, model restrictions, account rules, and availability still apply; auto-switching cannot bypass them or guarantee uninterrupted use. Do not enable paid billing unless you intentionally want to pay.")
                 .setPositiveButton("GOT IT", (d, w) -> d.dismiss()).show();
             return;
         }
@@ -355,7 +355,7 @@ public class AiChatActivity extends Activity {
         }
         if (connectionStatus != null) {
             connectionStatus.setText(connected + " of " + providers.size() +
-                " providers configured. Auto-switch uses saved keys only; it cannot bypass provider quotas.");
+                " providers configured. No app-set daily message cap; provider quotas still apply.");
         }
     }
 
