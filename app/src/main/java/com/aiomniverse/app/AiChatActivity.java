@@ -63,7 +63,7 @@ public class AiChatActivity extends Activity {
         new Provider("gemini", "Google Gemini API", "https://generativelanguage.googleapis.com/v1beta/models/",
             "https://aistudio.google.com/apikey", "gemini-3.5-flash-lite", true),
         new Provider("groq", "GroqCloud API", "https://api.groq.com/openai/v1/chat/completions",
-            "https://console.groq.com/keys", "llama-3.3-70b-versatile", false),
+            "https://console.groq.com/keys", "openai/gpt-oss-120b", false),
         new Provider("cerebras", "Cerebras Inference API", "https://api.cerebras.ai/v1/chat/completions",
             "https://cloud.cerebras.ai/platform", "gpt-oss-120b", false)
     );
