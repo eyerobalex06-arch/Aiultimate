@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
         top.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
         TextView badge = text("BETA", 10, purple, true);
         badge.setPadding(dp(10), dp(7), dp(10), dp(7));
-        badge.setBackground(round(Color.rgb(39, 30, 67), 18));
+        badge.setBackground(round(Color.rgb(37, 60, 52), 18));
         top.addView(badge);
         root.addView(top);
 
@@ -104,17 +104,17 @@ public class MainActivity extends Activity {
         hero.addView(subtitle, sp);
         page.addView(hero);
 
-        Button getApiKey = new Button(this);
-        getApiKey.setText("GET API KEY  ↗");
-        getApiKey.setTextSize(13);
-        getApiKey.setTextColor(white);
-        getApiKey.setAllCaps(false);
-        getApiKey.setTypeface(Typeface.DEFAULT_BOLD);
-        getApiKey.setBackground(gradient(new int[]{Color.rgb(32, 111, 145), Color.rgb(35, 75, 118)}, 16));
-        LinearLayout.LayoutParams getApiKeyParams = new LinearLayout.LayoutParams(-1, dp(48));
-        getApiKeyParams.topMargin = dp(12);
-        getApiKey.setOnClickListener(v -> showGetApiKeyDialog());
-        page.addView(getApiKey, getApiKeyParams);
+        Button liveChat = new Button(this);
+        liveChat.setText("START A NEW CHAT  ↗");
+        liveChat.setTextSize(13);
+        liveChat.setTextColor(white);
+        liveChat.setAllCaps(false);
+        liveChat.setTypeface(Typeface.DEFAULT_BOLD);
+        liveChat.setBackground(gradient(new int[]{Color.rgb(16, 163, 127), Color.rgb(12, 125, 98)}, 16));
+        LinearLayout.LayoutParams liveChatParams = new LinearLayout.LayoutParams(-1, dp(50));
+        liveChatParams.topMargin = dp(8);
+        liveChat.setOnClickListener(v -> startActivity(new Intent(this, AiChatActivity.class)));
+        page.addView(liveChat, liveChatParams);
 
         Button addApiKey = new Button(this);
         addApiKey.setText("ADD API KEY  +");
@@ -122,7 +122,7 @@ public class MainActivity extends Activity {
         addApiKey.setTextColor(white);
         addApiKey.setAllCaps(false);
         addApiKey.setTypeface(Typeface.DEFAULT_BOLD);
-        addApiKey.setBackground(gradient(new int[]{Color.rgb(91, 70, 164), Color.rgb(69, 54, 127)}, 16));
+        addApiKey.setBackground(gradient(new int[]{Color.rgb(58, 70, 66), Color.rgb(43, 54, 51)}, 16));
         LinearLayout.LayoutParams addApiKeyParams = new LinearLayout.LayoutParams(-1, dp(48));
         addApiKeyParams.topMargin = dp(7);
         addApiKey.setOnClickListener(v -> {
@@ -132,17 +132,17 @@ public class MainActivity extends Activity {
         });
         page.addView(addApiKey, addApiKeyParams);
 
-        Button liveChat = new Button(this);
-        liveChat.setText("OPEN MULTI-AI CHAT  ↗");
-        liveChat.setTextSize(13);
-        liveChat.setTextColor(white);
-        liveChat.setAllCaps(false);
-        liveChat.setTypeface(Typeface.DEFAULT_BOLD);
-        liveChat.setBackground(gradient(new int[]{Color.rgb(126, 87, 194), Color.rgb(91, 70, 164)}, 16));
-        LinearLayout.LayoutParams liveChatParams = new LinearLayout.LayoutParams(-1, dp(50));
-        liveChatParams.topMargin = dp(8);
-        liveChat.setOnClickListener(v -> startActivity(new Intent(this, AiChatActivity.class)));
-        page.addView(liveChat, liveChatParams);
+        Button getApiKey = new Button(this);
+        getApiKey.setText("GET API KEY  ↗");
+        getApiKey.setTextSize(13);
+        getApiKey.setTextColor(white);
+        getApiKey.setAllCaps(false);
+        getApiKey.setTypeface(Typeface.DEFAULT_BOLD);
+        getApiKey.setBackground(gradient(new int[]{Color.rgb(58, 58, 58), Color.rgb(48, 48, 48)}, 16));
+        LinearLayout.LayoutParams getApiKeyParams = new LinearLayout.LayoutParams(-1, dp(48));
+        getApiKeyParams.topMargin = dp(12);
+        getApiKey.setOnClickListener(v -> showGetApiKeyDialog());
+        page.addView(getApiKey, getApiKeyParams);
 
         Button agentHub = new Button(this);
         agentHub.setText("OPEN AI AGENT GROUP  ✦");
@@ -150,7 +150,7 @@ public class MainActivity extends Activity {
         agentHub.setTextColor(white);
         agentHub.setAllCaps(false);
         agentHub.setTypeface(Typeface.DEFAULT_BOLD);
-        agentHub.setBackground(gradient(new int[]{Color.rgb(40, 85, 105), Color.rgb(38, 54, 91)}, 16));
+        agentHub.setBackground(gradient(new int[]{Color.rgb(58, 58, 58), Color.rgb(45, 45, 45)}, 16));
         LinearLayout.LayoutParams agentHubParams = new LinearLayout.LayoutParams(-1, dp(50));
         agentHubParams.topMargin = dp(8);
         agentHub.setOnClickListener(v -> startActivity(new Intent(this, AgentWorkspaceActivity.class)));
@@ -163,7 +163,7 @@ public class MainActivity extends Activity {
         search.setHintTextColor(muted);
         search.setHint("⌕   Search models, skills, or tasks");
         search.setPadding(dp(15), 0, dp(15), 0);
-        search.setBackground(round(panel, 16));
+        search.setBackground(round(Color.rgb(47, 47, 47), 16));
         LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, dp(56));
         searchParams.bottomMargin = dp(14);
         page.addView(search, searchParams);
@@ -186,7 +186,7 @@ public class MainActivity extends Activity {
         filtersScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.HORIZONTAL);
-        String[] categories = {"All", "Coding", "Reasoning", "Fast", "Images", "Audio", "Local", "Research"};
+        String[] categories = {"All", "Coding", "Reasoning", "Fast", "Web", "Images", "Audio", "Local", "Research"};
         for (String category : categories) {
             TextView chip = text(category, 12, category.equals(activeFilter) ? bg : muted, true);
             chip.setGravity(Gravity.CENTER);
@@ -317,7 +317,7 @@ public class MainActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL);
         TextView icon = text(m.name.substring(0, 1), 18, white, true);
         icon.setGravity(Gravity.CENTER);
-        icon.setBackground(round(Color.rgb(56, 43, 94), 14));
+        icon.setBackground(round(Color.rgb(49, 68, 61), 14));
         top.addView(icon, new LinearLayout.LayoutParams(dp(46), dp(46)));
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
@@ -327,7 +327,7 @@ public class MainActivity extends Activity {
         top.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
         TextView modality = text(m.modality.toUpperCase(Locale.ROOT), 9, purple, true);
         modality.setPadding(dp(8), dp(6), dp(8), dp(6));
-        modality.setBackground(round(Color.rgb(39, 30, 67), 12));
+        modality.setBackground(round(Color.rgb(37, 60, 52), 12));
         top.addView(modality);
         card.addView(top);
 
@@ -342,7 +342,7 @@ public class MainActivity extends Activity {
         for (String tag : m.tags.split(" ")) {
             TextView t = text("✦ " + tag, 9, Color.rgb(190, 175, 255), true);
             t.setPadding(dp(8), dp(7), dp(8), dp(7));
-            t.setBackground(round(Color.rgb(34, 29, 53), 10));
+            t.setBackground(round(Color.rgb(54, 54, 54), 10));
             LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2);
             tp.rightMargin = dp(6);
             tags.addView(t, tp);
@@ -356,7 +356,7 @@ public class MainActivity extends Activity {
         details.setTextColor(white);
         details.setAllCaps(false);
         details.setTypeface(Typeface.DEFAULT_BOLD);
-        details.setBackground(round(Color.rgb(44, 47, 70), 13));
+        details.setBackground(round(Color.rgb(60, 60, 60), 13));
         card.addView(details, new LinearLayout.LayoutParams(-1, dp(43)));
         View.OnClickListener open = v -> showDetails(m);
         card.setOnClickListener(open);
