@@ -360,15 +360,36 @@ public class AiChatActivity extends Activity {
         return null;
     }
 
+    private boolean isProviderConfigured(Provider provider) {
+        try {
+            String model = getPreferences(MODEL_KEY_PREFIX + provider.id, provider.defaultModel);
+            String encrypted = getSavedKeyForModel(provider, model);
+            return encrypted != null && !encrypted.isEmpty() && !decryptKey(encrypted).trim().isEmpty();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private int getConfiguredProviderCount() {
+        int count = 0;
+        for (Provider provider : providers) {
+            if (isProviderConfigured(provider)) count++;
+        }
+        return count;
+    }
+
     private void updateModelPickerLabel() {
         if (modelPicker == null) return;
         if (currentProviderIndex <= 0) {
-            modelPicker.setText("✦  Auto-switch · all connected models  ▾");
+            int ready = getConfiguredProviderCount();
+            modelPicker.setText("✦  Auto-switch · " + ready + " provider" + (ready == 1 ? "" : "s") + " ready  ▾");
             return;
         }
         Provider p = providers.get(currentProviderIndex - 1);
         String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
-        modelPicker.setText("✦  " + p.label.replace(" API", "") + " · " + model + "  ▾");
+        String shortName = p.label.replace(" API", "").replace("Cloud", "").replace(" Inference", "");
+        String status = isProviderConfigured(p) ? "KEY SAVED" : "ADD KEY";
+        modelPicker.setText("✦  " + shortName + " · " + model + " · " + status + "  ▾");
     }
 
     private void showModelPicker() {
@@ -379,7 +400,7 @@ public class AiChatActivity extends Activity {
             String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
             boolean configured = false;
             try { configured = !decryptKey(getSavedKeyForModel(p, model)).trim().isEmpty(); } catch (Exception ignored) {}
-            choices[i + 1] = p.label + "\n" + model + (configured ? " · KEY SAVED" : " · ADD KEY IN SETTINGS");
+            choices[i + 1] = (configured ? "✓  " : "＋  ") + p.label + "\n" + model + (configured ? " · API KEY SAVED" : " · TAP TO SET UP");
         }
         new AlertDialog.Builder(this)
             .setTitle("Choose a model")
@@ -781,11 +802,24 @@ public class AiChatActivity extends Activity {
             editor.putString(MODEL_KEY_PREFIX + p.id, model);
             editor.remove(KEY_PREFIX + p.id).remove(KEY_NAME_PREFIX + p.id).apply();
             keyInput.setText("");
-            keyInput.setHint("Saved securely for model: " + model);
-            providerInfo.setText(p.label + "  •  " + model + "  •  Saved as: " + keyName + "  •  Encrypted on this device.");
-            Toast.makeText(this, "Saved '" + keyName + "' for model " + model + ". Other model keys stay separate.", Toast.LENGTH_LONG).show();
+            keyInput.setHint("API key saved securely");
+            providerInfo.setText("✓  " + p.label + "  •  " + model + "  •  Saved as: " + keyName + "  •  Encrypted on this device.");
             updateConnectionStatus();
             updateModelPickerLabel();
+
+            // Saving a key should finish setup and return the user to the clean chat screen.
+            configPanel.animate().alpha(0f).setDuration(140).withEndAction(() -> {
+                configPanel.setVisibility(View.GONE);
+                configPanel.setAlpha(1f);
+            }).start();
+            View focused = getCurrentFocus();
+            if (focused != null) {
+                android.view.inputmethod.InputMethodManager keyboard =
+                    (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (keyboard != null) keyboard.hideSoftInputFromWindow(focused.getWindowToken(), 0);
+                focused.clearFocus();
+            }
+            Toast.makeText(this, "API key saved securely. Provider settings closed.", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Toast.makeText(this, "Could not save settings: " + safeError(e), Toast.LENGTH_LONG).show();
         }
@@ -885,17 +919,10 @@ public class AiChatActivity extends Activity {
     }
 
     private void updateConnectionStatus() {
-        int connected = 0;
-        for (Provider p : providers) {
-            try {
-                String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
-                String encrypted = getSavedKeyForModel(p, model);
-                if (!encrypted.isEmpty() && !decryptKey(encrypted).trim().isEmpty()) connected++;
-            } catch (Exception ignored) {}
-        }
+        int connected = getConfiguredProviderCount();
         if (connectionStatus != null) {
-            connectionStatus.setText(connected + " of " + providers.size() +
-                " providers configured. No app-set daily message cap; provider quotas still apply.");
+            connectionStatus.setText("✓  " + connected + " of " + providers.size() +
+                " providers have a saved key. Free-tier quotas and provider availability still apply.");
         }
     }
 
