@@ -62,3 +62,13 @@ The GitHub Actions workflow builds a debug APK using Gradle and Android SDK 35. 
 ### Per-model API key storage and chat navigation
 - API keys are encrypted on-device and stored separately for each provider + model ID pair. Saving a key for one model does not overwrite another model's key. The chat toolbar's three-dot menu includes add/change, official provider key pages, delete current model key, and jump-to-top/bottom shortcuts.
 - Use the TOP and BOTTOM controls beneath the conversation to scroll through chat history. The model search field is now nearer the top of the home screen.
+
+
+## Chat interface and saved conversations
+
+- The chat screen uses a conversation-first layout with a compact model picker, starter prompts, a bottom message composer that respects Android navigation insets, and a new-chat button.
+- Choose Auto-switch or select a preferred provider/model from OpenRouter, Google Gemini, GroqCloud, Cerebras, Mistral AI, or NVIDIA NIM. Custom model IDs can be entered under **Manage API keys / providers**.
+- Up to 30 conversations are kept locally on the phone and saved as you send and receive messages. Open the three-dot menu and choose **Your conversations** to return to an earlier conversation. Starting a new chat does not erase the previous one.
+- To create an automatic cloud-backup file, open the three-dot menu, choose **Set up / change OneDrive backup**, and select a writable OneDrive location in the Android file picker. AI OMNIVERSE will update the selected JSON file when conversations change and when the chat screen is left. Use **Restore conversations from backup** to import a backup later.
+- Availability of OneDrive as a writable destination depends on the OneDrive app and Android's document-provider picker on the device. If OneDrive is not offered there, this file-picker backup route cannot write directly to it; a Microsoft Graph / OneDrive app registration would be needed for direct account-based sync. Local conversation saving works regardless.
+- The conversation backup contains chat text and metadata. Do not place sensitive information in conversations or backups unless you are comfortable storing it in that destination.
