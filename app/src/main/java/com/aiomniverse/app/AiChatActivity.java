@@ -74,6 +74,7 @@ public class AiChatActivity extends Activity {
 
     private Spinner providerSpinner;
     private EditText keyInput;
+    private EditText keyNameInput;
     private EditText modelInput;
     private EditText messageInput;
     private TextView providerInfo;
@@ -176,6 +177,11 @@ public class AiChatActivity extends Activity {
         infoParams.topMargin = dp(5);
         config.addView(providerInfo, infoParams);
         providerInfo.setOnClickListener(v -> openProviderSetup());
+
+        keyNameInput = input("Name this key (e.g. My OpenRouter Key)", false);
+        LinearLayout.LayoutParams keyNameParams = new LinearLayout.LayoutParams(-1, dp(46));
+        keyNameParams.topMargin = dp(9);
+        config.addView(keyNameInput, keyNameParams);
 
         modelInput = input("Model ID (provider default)", false);
         LinearLayout.LayoutParams modelParams = new LinearLayout.LayoutParams(-1, dp(46));
@@ -282,6 +288,9 @@ public class AiChatActivity extends Activity {
             providerInfo.setText("No app-set daily message quota. Tries every saved provider in order and falls back after errors or rate limits. Free quotas, account rules, and availability still apply; switching providers does not bypass limits. Add as many eligible free-provider accounts as their terms permit.");
             modelInput.setText("");
             modelInput.setHint("Auto mode chooses each provider's saved model");
+            keyNameInput.setText("");
+            keyNameInput.setHint("Select a provider to name its key");
+            keyNameInput.setEnabled(false);
             keyInput.setText("");
             keyInput.setHint("Select a specific provider to add its key");
             keyInput.setEnabled(false);
@@ -290,7 +299,12 @@ public class AiChatActivity extends Activity {
             forgetButton.setEnabled(false);
         } else {
             Provider p = providers.get(currentProviderIndex - 1);
-            providerInfo.setText(p.label + "  •  Tap here or GET FREE KEY to open its official key page. Free-tier quotas and account rules still apply.");
+            String savedKeyName = getPreferences(KEY_NAME_PREFIX + p.id, "");
+            providerInfo.setText(p.label + (savedKeyName.isEmpty() ? "" : "  •  Saved as: " + savedKeyName)
+                + "  •  Tap here or GET FREE KEY to open its official key page. Provider quotas and availability apply.");
+            keyNameInput.setEnabled(true);
+            keyNameInput.setHint("Name this key (e.g. My " + p.label + " Key)");
+            keyNameInput.setText(savedKeyName.isEmpty() ? "My " + p.label + " Key" : savedKeyName);
             modelInput.setHint("Model ID (editable)");
             modelInput.setEnabled(true);
             keyInput.setEnabled(true);
@@ -306,6 +320,7 @@ public class AiChatActivity extends Activity {
 
     private static final String KEY_PREFIX = "encrypted_key_";
     private static final String MODEL_KEY_PREFIX = "model_";
+    private static final String KEY_NAME_PREFIX = "key_name_";
 
     private String getPreferences(String key, String fallback) {
         return getSharedPreferences(PREFS, MODE_PRIVATE).getString(key, fallback);
@@ -315,7 +330,10 @@ public class AiChatActivity extends Activity {
         if (currentProviderIndex == 0) return;
         Provider p = providers.get(currentProviderIndex - 1);
         String key = keyInput.getText().toString().trim();
+        String keyName = keyNameInput.getText().toString().trim();
         String model = modelInput.getText().toString().trim();
+        if (keyName.isEmpty()) keyName = "My " + p.label + " Key";
+        if (keyName.length() > 60) keyName = keyName.substring(0, 60);
         try {
             android.content.SharedPreferences.Editor editor = getSharedPreferences(PREFS, MODE_PRIVATE).edit();
             if (!key.isEmpty()) editor.putString(KEY_PREFIX + p.id, encryptKey(key));
@@ -323,10 +341,12 @@ public class AiChatActivity extends Activity {
                 Toast.makeText(this, "Paste an API key first. It is saved only on this device.", Toast.LENGTH_LONG).show();
                 return;
             }
+            editor.putString(KEY_NAME_PREFIX + p.id, keyName);
             editor.putString(MODEL_KEY_PREFIX + p.id, model.isEmpty() ? p.defaultModel : model).apply();
             keyInput.setText("");
             keyInput.setHint("Key saved encrypted. Paste again only to replace it.");
-            Toast.makeText(this, "Settings saved for " + p.label + ". The API key remains encrypted on this device.", Toast.LENGTH_LONG).show();
+            providerInfo.setText(p.label + "  •  Saved as: " + keyName + "  •  Key stored encrypted on this device.");
+            Toast.makeText(this, "Saved '" + keyName + "'. It will be available to chat and Auto-switch until you replace or forget it. Provider outages and limits still apply.", Toast.LENGTH_LONG).show();
             updateConnectionStatus();
         } catch (Exception e) {
             Toast.makeText(this, "Could not save settings: " + safeError(e), Toast.LENGTH_LONG).show();
@@ -336,8 +356,13 @@ public class AiChatActivity extends Activity {
     private void forgetCurrentKey() {
         if (currentProviderIndex == 0) return;
         Provider p = providers.get(currentProviderIndex - 1);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_PREFIX + p.id).apply();
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .remove(KEY_PREFIX + p.id)
+            .remove(KEY_NAME_PREFIX + p.id)
+            .apply();
         keyInput.setText("");
+        keyNameInput.setText("My " + p.label + " Key");
+        providerInfo.setText(p.label + "  •  Key removed from this device.");
         Toast.makeText(this, p.label + " key forgotten.", Toast.LENGTH_SHORT).show();
         updateConnectionStatus();
     }
