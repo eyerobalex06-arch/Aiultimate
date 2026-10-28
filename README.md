@@ -13,8 +13,8 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 - AI Agent Group: create and customize role-based bots, run a shared group discussion where each agent can build on earlier replies, and queue missions using Android WorkManager so they can continue when the screen is closed (Android may defer background work)
 - No app-imposed daily message quota; Auto-switch tries other configured providers when a provider fails, is rate-limited, or unavailable. Actual use remains subject to every provider’s quotas, account rules, model access, and capacity
 - OpenRouter's `openrouter/free` model router, which can choose from its currently available free models
-- Direct API connectors for Google Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM, with editable model IDs. Defaults are intended for current model catalogs but provider availability and free access can change.
-- Provider setup links and editable model IDs
+- Direct API connectors for DeepSeek, Google Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM, with editable model IDs. Provider access, model names, prices, and free quotas can change.
+- Optional OpenRouter Web Search mode using OpenRouter's server-side web-search tool; tool availability and pricing depend on the selected API account and model
 - API keys encrypted locally with Android Keystore-backed AES-GCM encryption
 - Provider credentials are not included in the app package; users supply their own keys
 - Backups disabled so locally stored provider credentials are not included in Android app backup
@@ -27,10 +27,11 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 3. Return to AI OMNIVERSE and tap **ADD API KEY**. The app opens the provider form with OpenRouter selected. Choose the provider you created a key for, paste the key, and press **SAVE KEY**.
 4. The key is encrypted on this device. Select **Auto-switch** to let the app try your saved providers in order.
 5. Send a message. The default OpenRouter model is `openrouter/free`, which selects from currently available free models.
-6. For additional fallback options, configure Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM using **GET API KEY** or **GET FREE KEY**. Only use free access unless you intentionally choose to pay.
+6. Configure DeepSeek, Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM using **GET API KEY** or the model explorer's **ADD API** prompt. Use OpenRouter for its model router and optional **Web Search** mode. Check provider pricing before use; search tools may incur separate charges.
 
 Official account/key pages:
-- OpenRouter: https://openrouter.ai/settings/keys
+- OpenRouter (models and Web Search): https://openrouter.ai/keys
+- DeepSeek API: https://platform.deepseek.com/api_keys
 - Google AI Studio: https://aistudio.google.com/apikey
 - GroqCloud: https://console.groq.com/keys
 - Cerebras: https://cloud.cerebras.ai/platform
