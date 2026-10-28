@@ -43,7 +43,13 @@ public class MainActivity extends Activity {
         new Model("Command R", "Cohere", "Retrieval-augmented generation and grounded answers", "RESEARCH", "RAG", "BUSINESS", "Designed for enterprise-style retrieval and working with supplied documents when used in a properly configured system.", "Text"),
         new Model("Whisper", "OpenAI", "Speech-to-text and transcription", "AUDIO", "TRANSCRIPTION", "MULTILINGUAL", "A speech recognition model family, not a general chat assistant. Language and audio quality affect results.", "Audio"),
         new Model("FLUX", "Black Forest Labs", "Text-to-image generation and visual concepts", "IMAGES", "ART", "DESIGN", "An image-generation model family. Usually needs a compatible hosted service or suitable graphics hardware.", "Images"),
-        new Model("Stable Diffusion", "Stability AI / community", "Image generation, styles, image workflows", "IMAGES", "ART", "CUSTOMIZATION", "A large ecosystem of image models and tools. Check each checkpoint's license and hardware requirements.", "Images")
+        new Model("Stable Diffusion", "Stability AI / community", "Image generation, styles, image workflows", "IMAGES", "ART", "CUSTOMIZATION", "A large ecosystem of image models and tools. Check each checkpoint's license and hardware requirements.", "Images"),
+        new Model("Nemotron 3 Ultra", "NVIDIA via OpenRouter", "High-end agentic reasoning, coding, planning, and long-context research", "REASONING", "CODING", "RESEARCH", "A current free variant appears in OpenRouter's free-model collection. Free model availability and quotas change; this is not unlimited cloud access.", "Text / code"),
+        new Model("Nemotron 3.5 Super VL", "NVIDIA via OpenRouter", "Multimodal reasoning for visual analysis, documents, and agent workflows", "REASONING", "RESEARCH", "IMAGES", "Listed among OpenRouter's popular free models at the time this catalog was updated. Access can vary with provider capacity and model availability.", "Text / images"),
+        new Model("Qwen 3.8 27B", "Qwen / OpenRouter", "Coding, general reasoning, multilingual tasks, and tool use", "CODING", "REASONING", "MULTILINGUAL", "Try a free hosted variant through OpenRouter's free collection. The same model family may be paid on other providers.", "Text / code"),
+        new Model("GPT-OSS 120B", "OpenAI open-weight model", "Large open-weight reasoning model for coding and agent-style tasks", "REASONING", "CODING", "GENERAL", "Available through selected hosted providers. A model being open-weight does not make every hosted API endpoint free; check provider pricing and quotas.", "Text / code"),
+        new Model("Gemini 3.6 Flash", "Google", "Fast general-purpose assistance, coding, and everyday agent tasks", "FAST", "GENERAL", "REASONING", "Google documents a free API tier for selected models, with usage limits and data-handling terms. Confirm access in AI Studio.", "Text / code"),
+        new Model("Ministral 8B", "Mistral AI", "Compact chat and coding assistant for faster responses", "FAST", "CODING", "MULTILINGUAL", "Mistral documents a free mode with no card required, but model access and rate limits depend on your workspace and may change.", "Text / code")
     );
 
     @Override public void onCreate(Bundle state) {
@@ -124,7 +130,7 @@ public class MainActivity extends Activity {
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.setPadding(0, dp(14), 0, dp(18));
-        stats.addView(stat("10", "MODEL FAMILIES"), new LinearLayout.LayoutParams(0, -2, 1));
+        stats.addView(stat("16", "MODEL FAMILIES"), new LinearLayout.LayoutParams(0, -2, 1));
         stats.addView(stat("6+", "SKILL AREAS"), new LinearLayout.LayoutParams(0, -2, 1));
         stats.addView(stat("FREE", "TO EXPLORE"), new LinearLayout.LayoutParams(0, -2, 1));
         page.addView(stats);
