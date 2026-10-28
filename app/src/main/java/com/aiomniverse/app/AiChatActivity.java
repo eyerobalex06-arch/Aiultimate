@@ -353,6 +353,332 @@ public class AiChatActivity extends Activity {
         updateModelPickerLabel();
     }
 
+
+    private SavedChat findSavedChat(String id) {
+        if (id == null || id.isEmpty()) return null;
+        for (SavedChat chat : savedChats) if (id.equals(chat.id)) return chat;
+        return null;
+    }
+
+    private void updateModelPickerLabel() {
+        if (modelPicker == null) return;
+        if (currentProviderIndex <= 0) {
+            modelPicker.setText("✦  Auto-switch · all connected models  ▾");
+            return;
+        }
+        Provider p = providers.get(currentProviderIndex - 1);
+        String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
+        modelPicker.setText("✦  " + p.label.replace(" API", "") + " · " + model + "  ▾");
+    }
+
+    private void showModelPicker() {
+        String[] choices = new String[providers.size() + 1];
+        choices[0] = "✦  Auto-switch · try connected providers";
+        for (int i = 0; i < providers.size(); i++) {
+            Provider p = providers.get(i);
+            String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
+            boolean configured = false;
+            try { configured = !decryptKey(getSavedKeyForModel(p, model)).trim().isEmpty(); } catch (Exception ignored) {}
+            choices[i + 1] = p.label + "\n" + model + (configured ? " · KEY SAVED" : " · ADD KEY IN SETTINGS");
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("Choose a model")
+            .setMessage("Choose a preferred model. Auto-switch can try other saved providers if the first one fails. Use provider settings to enter a different model ID.")
+            .setItems(choices, (dialog, which) -> {
+                providerSpinner.setSelection(which);
+                currentProviderIndex = which;
+                updateModelPickerLabel();
+            })
+            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
+    private void showKeySettings() {
+        configPanel.setVisibility(View.VISIBLE);
+        if (currentProviderIndex == 0) providerSpinner.setSelection(1);
+        Toast.makeText(this, "Saved keys are encrypted on this device. Choose a provider below.", Toast.LENGTH_LONG).show();
+    }
+
+    private void renderWelcome() {
+        messagesColumn.removeAllViews();
+        LinearLayout welcome = new LinearLayout(this);
+        welcome.setOrientation(LinearLayout.VERTICAL);
+        welcome.setGravity(Gravity.CENTER_HORIZONTAL);
+        welcome.setPadding(dp(8), dp(24), dp(8), dp(12));
+        TextView mark = text("✳", 38, PURPLE, true);
+        mark.setGravity(Gravity.CENTER);
+        welcome.addView(mark, new LinearLayout.LayoutParams(-1, dp(54)));
+        TextView title = text("What can I help with?", 25, WHITE, true);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = dp(8);
+        welcome.addView(title, titleParams);
+        TextView subtitle = text("Ask a question, build something, or explore an idea.", 13, MUTED, false);
+        subtitle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
+        subtitleParams.topMargin = dp(7);
+        welcome.addView(subtitle, subtitleParams);
+        String[][] prompts = {
+            {"⌘  Help me write code", "Help me write and explain a small Python program."},
+            {"✦  Explain something", "Explain a difficult topic in simple steps, with an example."},
+            {"◈  Brainstorm ideas", "Help me brainstorm creative ideas and compare the best ones."},
+            {"↗  Plan a project", "Help me plan a project from idea to finished result."}
+        };
+        for (String[] prompt : prompts) {
+            Button chip = button(prompt[0], Color.rgb(24, 28, 43));
+            chip.setTextSize(12);
+            chip.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+            chip.setPadding(dp(14), 0, dp(12), 0);
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, dp(48));
+            cp.topMargin = dp(9);
+            welcome.addView(chip, cp);
+            chip.setOnClickListener(v -> {
+                messageInput.setText(prompt[1]);
+                messageInput.setSelection(messageInput.length());
+                messageInput.requestFocus();
+                ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                    .showSoftInput(messageInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            });
+        }
+        TextView footer = text("Choose a model above to change your AI.", 11, MUTED, false);
+        footer.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+        fp.topMargin = dp(15);
+        welcome.addView(footer, fp);
+        messagesColumn.addView(welcome, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private void startNewChat(boolean showToast) {
+        if (!history.isEmpty()) saveLocalChats();
+        activeChatId = UUID.randomUUID().toString();
+        history.clear();
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ACTIVE_CHAT_PREF, activeChatId).apply();
+        renderWelcome();
+        saveLocalChats();
+        if (showToast) Toast.makeText(this, "New conversation ready.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void openSavedChats() {
+        if (savedChats.isEmpty()) {
+            Toast.makeText(this, "Conversations are saved on this phone as you chat.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        List<SavedChat> sorted = new ArrayList<>(savedChats);
+        Collections.sort(sorted, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
+        String[] labels = new String[sorted.size()];
+        for (int i = 0; i < sorted.size(); i++) {
+            SavedChat chat = sorted.get(i);
+            labels[i] = (chat.title == null || chat.title.isEmpty() ? "New chat" : chat.title)
+                + " · " + chat.messages.size() + " messages";
+        }
+        new AlertDialog.Builder(this).setTitle("Your conversations")
+            .setItems(labels, (dialog, which) -> restoreChat(sorted.get(which), true))
+            .setNeutralButton("NEW CHAT", (dialog, which) -> startNewChat(true))
+            .setNegativeButton("CLOSE", (dialog, which) -> dialog.dismiss()).show();
+    }
+
+    private void restoreChat(SavedChat chat, boolean showToast) {
+        if (chat == null) return;
+        if (!history.isEmpty()) saveLocalChats();
+        activeChatId = chat.id;
+        history.clear();
+        history.addAll(chat.messages);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ACTIVE_CHAT_PREF, activeChatId).apply();
+        messagesColumn.removeAllViews();
+        if (history.isEmpty()) renderWelcome();
+        else {
+            for (ChatMessage message : history) renderMessage(message);
+            messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_DOWN));
+        }
+        if (showToast) Toast.makeText(this, "Conversation reopened.", Toast.LENGTH_SHORT).show();
+    }
+
+    private String titleForMessages(List<ChatMessage> messages) {
+        for (ChatMessage message : messages) if ("user".equals(message.role)) {
+            String title = message.text.trim().replace('\n', ' ');
+            if (title.length() > 38) title = title.substring(0, 35) + "...";
+            return title.isEmpty() ? "New chat" : title;
+        }
+        return "New chat";
+    }
+
+    private JSONObject chatToJson(SavedChat chat) throws Exception {
+        JSONObject object = new JSONObject();
+        object.put("id", chat.id);
+        object.put("title", chat.title);
+        object.put("updatedAt", chat.updatedAt);
+        JSONArray array = new JSONArray();
+        int start = Math.max(0, chat.messages.size() - 40);
+        for (int i = start; i < chat.messages.size(); i++) {
+            ChatMessage m = chat.messages.get(i);
+            array.put(new JSONObject().put("role", m.role).put("text", m.text).put("source", m.source));
+        }
+        object.put("messages", array);
+        return object;
+    }
+
+    private String serializeChats() throws Exception {
+        JSONObject root = new JSONObject();
+        root.put("format", "AI OMNIVERSE conversation backup");
+        root.put("version", 1);
+        root.put("savedAt", System.currentTimeMillis());
+        JSONArray array = new JSONArray();
+        for (SavedChat chat : savedChats) array.put(chatToJson(chat));
+        root.put("chats", array);
+        return root.toString(2);
+    }
+
+    private List<SavedChat> parseChats(String json) throws Exception {
+        List<SavedChat> result = new ArrayList<>();
+        JSONArray array = new JSONObject(json).optJSONArray("chats");
+        if (array == null) throw new Exception("This file is not an AI OMNIVERSE conversation backup.");
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject o = array.optJSONObject(i);
+            if (o == null) continue;
+            SavedChat chat = new SavedChat(o.optString("id", UUID.randomUUID().toString()),
+                o.optString("title", "New chat"), o.optLong("updatedAt", System.currentTimeMillis()));
+            JSONArray msgs = o.optJSONArray("messages");
+            if (msgs != null) {
+                int start = Math.max(0, msgs.length() - 40);
+                for (int j = start; j < msgs.length(); j++) {
+                    JSONObject m = msgs.optJSONObject(j);
+                    if (m == null) continue;
+                    String role = m.optString("role", "");
+                    if (role.equals("user") || role.equals("assistant"))
+                        chat.messages.add(new ChatMessage(role, m.optString("text", ""), m.optString("source", "")));
+                }
+            }
+            result.add(chat);
+        }
+        return result;
+    }
+
+    private void loadSavedChats() {
+        savedChats.clear();
+        String json = getSharedPreferences(PREFS, MODE_PRIVATE).getString(CHAT_HISTORY_PREF, "");
+        if (json.isEmpty()) return;
+        try {
+            savedChats.addAll(parseChats(json));
+            Collections.sort(savedChats, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
+        } catch (Exception e) {
+            Toast.makeText(this, "Couldn't read saved conversations. API keys are unchanged.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void saveLocalChats() {
+        if (activeChatId.isEmpty()) activeChatId = UUID.randomUUID().toString();
+        SavedChat active = findSavedChat(activeChatId);
+        if (active == null) {
+            active = new SavedChat(activeChatId, "New chat", System.currentTimeMillis());
+            savedChats.add(active);
+        }
+        active.messages.clear();
+        active.messages.addAll(history);
+        active.title = titleForMessages(history);
+        active.updatedAt = System.currentTimeMillis();
+        Collections.sort(savedChats, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
+        while (savedChats.size() > 30 && !savedChats.get(savedChats.size() - 1).id.equals(activeChatId))
+            savedChats.remove(savedChats.size() - 1);
+        try {
+            String json = serializeChats();
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(CHAT_HISTORY_PREF, json).putString(ACTIVE_CHAT_PREF, activeChatId).apply();
+            queueOneDriveBackup(json);
+        } catch (Exception e) {
+            android.util.Log.e("AIOMNIVERSE", "Unable to save conversation history", e);
+        }
+    }
+
+    private void chooseBackupFile() {
+        new AlertDialog.Builder(this)
+            .setTitle("Connect OneDrive backup")
+            .setMessage("Choose a OneDrive location in the Android file picker and save AI-OMNIVERSE-chats.json. Once connected, AI OMNIVERSE will update that file after messages and when you leave the chat. Conversations are also saved on this phone immediately.")
+            .setPositiveButton("CHOOSE FILE", (dialog, which) -> {
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/json");
+                intent.putExtra(Intent.EXTRA_TITLE, "AI-OMNIVERSE-chats.json");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                try { startActivityForResult(intent, REQUEST_CREATE_BACKUP); }
+                catch (Exception e) { Toast.makeText(this, "The file picker couldn't open.", Toast.LENGTH_LONG).show(); }
+            })
+            .setNegativeButton("NOT NOW", (dialog, which) -> dialog.dismiss()).show();
+    }
+
+    private void restoreBackupFromFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try { startActivityForResult(intent, REQUEST_RESTORE_BACKUP); }
+        catch (Exception e) { Toast.makeText(this, "The file picker couldn't open.", Toast.LENGTH_LONG).show(); }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        if (requestCode == REQUEST_CREATE_BACKUP) {
+            try {
+                int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                getContentResolver().takePersistableUriPermission(uri, flags);
+            } catch (Exception ignored) {}
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ONEDRIVE_BACKUP_URI_PREF, uri.toString()).apply();
+            saveLocalChats();
+            Toast.makeText(this, "Backup file connected. New messages will automatically update it.", Toast.LENGTH_LONG).show();
+        } else if (requestCode == REQUEST_RESTORE_BACKUP) {
+            try {
+                String json = readAll(getContentResolver().openInputStream(uri));
+                List<SavedChat> imported = parseChats(json);
+                if (imported.isEmpty()) throw new Exception("No conversations were found in that backup file.");
+                for (SavedChat chat : imported) {
+                    SavedChat old = findSavedChat(chat.id);
+                    if (old != null) savedChats.remove(old);
+                    savedChats.add(chat);
+                }
+                Collections.sort(savedChats, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
+                restoreChat(savedChats.get(0), false);
+                saveLocalChats();
+                Toast.makeText(this, "Restored " + imported.size() + " conversation(s).", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Couldn't restore backup: " + safeError(e), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private void queueOneDriveBackup(String json) {
+        String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ONEDRIVE_BACKUP_URI_PREF, "");
+        if (target.isEmpty()) return;
+        final String snapshot = json;
+        final Uri uri = Uri.parse(target);
+        try {
+            backupExecutor.execute(() -> {
+                try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
+                    if (output == null) throw new Exception("No output stream for the backup file.");
+                    output.write(snapshot.getBytes(StandardCharsets.UTF_8));
+                    output.flush();
+                    lastBackupError = "";
+                } catch (Exception e) {
+                    String error = safeError(e);
+                    if (!error.equals(lastBackupError)) {
+                        lastBackupError = error;
+                        runOnUiThread(() -> Toast.makeText(this,
+                            "Cloud backup didn't finish. Your chat is still saved on this phone. Check your backup location.",
+                            Toast.LENGTH_LONG).show());
+                    }
+                    android.util.Log.w("AIOMNIVERSE", "Cloud backup failed", e);
+                }
+            });
+        } catch (Exception e) {
+            android.util.Log.w("AIOMNIVERSE", "Cloud backup task couldn't be queued", e);
+        }
+    }
+
+    @Override protected void onStop() {
+        saveLocalChats();
+        super.onStop();
+    }
+
     private void refreshProviderForm() {
         boolean auto = currentProviderIndex == 0;
         if (auto) {
