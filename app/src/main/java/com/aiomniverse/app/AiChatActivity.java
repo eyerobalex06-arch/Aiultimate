@@ -811,14 +811,22 @@ public class AiChatActivity extends Activity {
 
     private void showApiKeyMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
-        menu.getMenu().add("Add / change API key").setOnMenuItemClickListener(item -> {
-            providerSpinner.setSelection(1);
-            Toast.makeText(this, "Choose a provider and model, paste the key, then tap SAVE KEY.", Toast.LENGTH_LONG).show();
-            return true;
-        });
+        menu.getMenu().add("New chat").setOnMenuItemClickListener(item -> { startNewChat(true); return true; });
+        menu.getMenu().add("Your conversations").setOnMenuItemClickListener(item -> { openSavedChats(); return true; });
+        menu.getMenu().add("Manage API keys / providers").setOnMenuItemClickListener(item -> { showKeySettings(); return true; });
+        menu.getMenu().add(configPanel.getVisibility() == View.VISIBLE ? "Hide provider settings" : "Show provider settings")
+            .setOnMenuItemClickListener(item -> {
+                configPanel.setVisibility(configPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                return true;
+            });
+        menu.getMenu().add("Set up / change OneDrive backup").setOnMenuItemClickListener(item -> { chooseBackupFile(); return true; });
+        menu.getMenu().add("Restore conversations from backup").setOnMenuItemClickListener(item -> { restoreBackupFromFile(); return true; });
+
         android.view.SubMenu keyLinks = menu.getMenu().addSubMenu("Get API key from provider");
         for (Provider provider : providers) {
             keyLinks.add(provider.label).setOnMenuItemClickListener(item -> {
+                configPanel.setVisibility(View.VISIBLE);
+                providerSpinner.setSelection(providers.indexOf(provider) + 1);
                 try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(provider.keyUrl))); }
                 catch (Exception e) { Toast.makeText(this, "Couldn't open the provider website.", Toast.LENGTH_SHORT).show(); }
                 return true;
@@ -827,9 +835,7 @@ public class AiChatActivity extends Activity {
         menu.getMenu().add("Copy latest AI reply").setOnMenuItemClickListener(item -> {
             for (int i = history.size() - 1; i >= 0; i--) {
                 ChatMessage message = history.get(i);
-                if (message.role.equals("assistant")
-                    && !message.source.equals("AI OMNIVERSE")
-                    && !message.source.equals("ROUTER")) {
+                if (message.role.equals("assistant") && !message.source.equals("AI OMNIVERSE") && !message.source.equals("ROUTER")) {
                     android.content.ClipboardManager clipboard =
                         (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("AI reply", message.text));
@@ -841,7 +847,8 @@ public class AiChatActivity extends Activity {
             return true;
         });
         menu.getMenu().add("Delete this model's API key").setOnMenuItemClickListener(item -> {
-            forgetCurrentKey();
+            if (currentProviderIndex == 0) Toast.makeText(this, "Choose a specific model first.", Toast.LENGTH_SHORT).show();
+            else forgetCurrentKey();
             return true;
         });
         menu.getMenu().add("Scroll conversation to top").setOnMenuItemClickListener(item -> {
@@ -857,39 +864,22 @@ public class AiChatActivity extends Activity {
 
     private void showProviderChooserForKey() {
         String[] names = new String[providers.size()];
-        for (int i = 0; i < providers.size(); i++) {
-            names[i] = providers.get(i).label;
-        }
+        for (int i = 0; i < providers.size(); i++) names[i] = providers.get(i).label;
         new AlertDialog.Builder(this)
             .setTitle("Choose an API key provider")
-            .setMessage("Pick the service where you created your key. NVIDIA NIM, Google Gemini, GroqCloud, Cerebras, Mistral, and OpenRouter are all supported.")
+            .setMessage("All six providers are supported, including NVIDIA NIM. Choose where you want to create a key.")
             .setItems(names, (dialog, which) -> {
                 Provider selected = providers.get(which);
+                configPanel.setVisibility(View.VISIBLE);
                 providerSpinner.setSelection(which + 1);
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(selected.keyUrl)));
-                } catch (Exception e) {
-                    Toast.makeText(this, "Couldn't open " + selected.label + " website.", Toast.LENGTH_SHORT).show();
-                }
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(selected.keyUrl))); }
+                catch (Exception e) { Toast.makeText(this, "Couldn't open " + selected.label + " website.", Toast.LENGTH_SHORT).show(); }
             })
-            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
-            .show();
+            .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss()).show();
     }
 
     private void openProviderSetup() {
-        if (currentProviderIndex == 0) {
-            new AlertDialog.Builder(this)
-                .setTitle("Connect free AI providers")
-                .setMessage("Choose OpenRouter, Gemini, Groq, Cerebras, Mistral Free Mode, or NVIDIA NIM, then tap GET FREE KEY. The app has no daily message quota of its own. Add multiple eligible free-provider keys and choose Auto-switch to try alternatives after errors or rate limits. Provider quotas, model restrictions, account rules, and availability still apply; auto-switching cannot bypass them or guarantee uninterrupted use. Do not enable paid billing unless you intentionally want to pay.")
-                .setPositiveButton("GOT IT", (d, w) -> d.dismiss()).show();
-            return;
-        }
-        Provider p = providers.get(currentProviderIndex - 1);
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(p.keyUrl)));
-        } catch (Exception e) {
-            Toast.makeText(this, "Couldn't open the provider website.", Toast.LENGTH_SHORT).show();
-        }
+        showProviderChooserForKey();
     }
 
     private void updateConnectionStatus() {
@@ -1120,32 +1110,44 @@ public class AiChatActivity extends Activity {
     private void setBusy(boolean value) {
         busy = value;
         sendButton.setEnabled(!value);
-        sendButton.setText(value ? "WAIT..." : "SEND  ➤");
+        sendButton.setText(value ? "…" : "↑");
         messageInput.setEnabled(!value);
         if (value) connectionStatus.setText("Trying configured cloud providers. Free quotas and availability apply...");
     }
 
     private void addMessage(String role, String body, String source) {
+        if (history.isEmpty()) messagesColumn.removeAllViews();
         ChatMessage message = new ChatMessage(role, body, source);
         history.add(message);
         if (history.size() > 40) history.remove(0);
+        renderMessage(message);
+        saveLocalChats();
+    }
+
+    private void renderMessage(ChatMessage message) {
+        String role = message.role;
+        String body = message.text;
+        String source = message.source;
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(role.equals("user") ? Gravity.END : Gravity.START);
-        row.setPadding(dp(8), dp(5), dp(8), dp(5));
+        row.setPadding(0, dp(5), 0, dp(8));
+
         LinearLayout bubble = new LinearLayout(this);
         bubble.setOrientation(LinearLayout.VERTICAL);
-        bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
-        int color = role.equals("user") ? Color.rgb(64, 50, 110) : Color.rgb(28, 32, 48);
-        bubble.setBackground(round(color, 15));
-        TextView who = text(role.equals("user") ? "YOU" : (source.isEmpty() ? "AI" : source), 9,
+        bubble.setPadding(role.equals("user") ? dp(13) : dp(2), dp(9), role.equals("user") ? dp(13) : dp(2), dp(9));
+        if (role.equals("user")) bubble.setBackground(round(Color.rgb(49, 44, 76), 20));
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        bubble.setMaxWidth(Math.max(dp(220), screenWidth - dp(role.equals("user") ? 100 : 52)));
+
+        TextView who = text(role.equals("user") ? "YOU" : "✦  " + (source.isEmpty() ? "AI" : source), 9,
             role.equals("user") ? Color.rgb(221, 214, 254) : PURPLE, true);
         bubble.addView(who);
-        TextView content = text(body, 13, WHITE, false);
+        TextView content = text(body, 14, WHITE, false);
         content.setTextIsSelectable(true);
-        content.setMaxWidth(dp(310));
+        content.setLineSpacing(dp(2), 1.0f);
         LinearLayout.LayoutParams contentParams = new LinearLayout.LayoutParams(-2, -2);
-        contentParams.topMargin = dp(4);
+        contentParams.topMargin = dp(5);
         bubble.addView(content, contentParams);
         row.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
         messagesColumn.addView(row, new LinearLayout.LayoutParams(-1, -2));
