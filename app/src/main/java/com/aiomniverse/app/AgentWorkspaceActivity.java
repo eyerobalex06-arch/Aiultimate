@@ -30,6 +30,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.UUID;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -115,7 +116,7 @@ public class AgentWorkspaceActivity extends Activity {
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.topMargin = dp(7);
         hero.addView(heroTitle, titleParams);
-        TextView heroCopy = text("Agents reply in sequence and can build on each other's messages. Queue a mission, leave the app, and check the group transcript later. Android may defer background work, and each AI provider's free quota still applies.", 12, Color.rgb(215, 222, 240), false);
+        TextView heroCopy = text("Agents reply in sequence and can build on each other's messages. Mention @Scout, @Builder, @Skeptic, or @Coordinator to call specific bots; without a matching @mention, everyone joins. Queue a mission, leave the app, and check the transcript later. Android may defer background work and free quotas still apply.", 12, Color.rgb(215, 222, 240), false);
         LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(-1, -2);
         copyParams.topMargin = dp(8);
         hero.addView(heroCopy, copyParams);
@@ -183,7 +184,7 @@ public class AgentWorkspaceActivity extends Activity {
             Toast.makeText(this, "Enter a task for the agents first.", Toast.LENGTH_SHORT).show();
             return;
         }
-        JSONArray agents = getAgents();
+        JSONArray agents = filterMentionedAgents(prompt, getAgents());
         if (agents.length() == 0) {
             Toast.makeText(this, "Add at least one AI agent.", Toast.LENGTH_SHORT).show();
             return;
@@ -241,6 +242,21 @@ public class AgentWorkspaceActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "Could not queue mission: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private JSONArray filterMentionedAgents(String prompt, JSONArray configured) {
+        JSONArray selected = new JSONArray();
+        String lowerPrompt = prompt.toLowerCase(Locale.ROOT);
+        for (int i = 0; i < configured.length(); i++) {
+            JSONObject agent = configured.optJSONObject(i);
+            if (agent == null) continue;
+            String name = agent.optString("name", "").trim();
+            if (!name.isEmpty() && lowerPrompt.contains("@" + name.toLowerCase(Locale.ROOT))) {
+                selected.put(agent);
+            }
+        }
+        // No matching @mention means the whole team participates.
+        return selected.length() > 0 ? selected : configured;
     }
 
     private boolean hasAnySavedKey() {
