@@ -12,7 +12,7 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 - Native chat screen, rather than embedding only one hosted chat website
 - No app-imposed daily message quota; Auto-switch tries other configured providers when a provider fails, is rate-limited, or unavailable. Actual use remains subject to every provider’s quotas, account rules, model access, and capacity
 - OpenRouter's `openrouter/free` model router, which can choose from its currently available free models
-- Direct API connectors for Google Gemini, GroqCloud, and Cerebras
+- Direct API connectors for Google Gemini, GroqCloud, and Cerebras, with editable model IDs; Groq defaults to its current `openai/gpt-oss-120b` model rather than the retired Llama 3.3 default
 - Provider setup links and editable model IDs
 - API keys encrypted locally with Android Keystore-backed AES-GCM encryption
 - Provider credentials are not included in the app package; users supply their own keys
