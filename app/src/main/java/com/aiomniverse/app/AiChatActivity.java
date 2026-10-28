@@ -244,7 +244,7 @@ public class AiChatActivity extends Activity {
         messagesScroll.setFillViewport(false);
         messagesScroll.setBackground(round(Color.rgb(12, 15, 26), 16));
         messagesScroll.addView(messagesColumn, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams messagesParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        LinearLayout.LayoutParams messagesParams = new LinearLayout.LayoutParams(-1, dp(280));
         body.addView(messagesScroll, messagesParams);
 
         LinearLayout conversationControls = new LinearLayout(this);
