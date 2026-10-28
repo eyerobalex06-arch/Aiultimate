@@ -38,9 +38,9 @@ Official account/key pages:
 
 ## AI Agent Group
 
-- Add up to 8 named agents with your own role instructions, such as researcher, builder, critic, and coordinator.
+- Add up to 8 named agents with your own role instructions, such as researcher, builder, critic, and coordinator. Type `@AgentName` in a mission to call out specific agents; otherwise the whole team participates.
 - A mission runs agents in sequence. Each agent receives the original task and earlier group replies, making this a shared transcript rather than isolated parallel chats.
-- Missions are queued with network constraints and saved transcripts, so work can continue while the app is closed. Android may defer background execution, and provider rate limits can slow or stop a mission.
+- Missions are queued as chained WorkManager jobs with network constraints and saved transcripts, so work can continue while the app is closed. Android may defer background execution, and provider rate limits can slow or stop a mission.
 - The app does not autonomously browse the web, control your device, or complete external actions. Agents generate text responses based on their prompts and provider capabilities.
 
 ## Important limitations and cost safety
