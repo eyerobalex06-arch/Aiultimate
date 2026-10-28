@@ -539,6 +539,381 @@ public class AiChatActivity extends Activity {
             .show();
     }
 
+    private void beginOneDriveSignIn() {
+        String clientId = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(ONEDRIVE_CLIENT_ID_PREF, "").trim();
+        if (clientId.isEmpty()) {
+            promptForOneDriveClientId();
+            return;
+        }
+        oneDriveLoginCancelled = false;
+        Toast.makeText(this, "Starting secure Microsoft sign-in…", Toast.LENGTH_SHORT).show();
+        authExecutor.execute(() -> {
+            try {
+                Map<String, String> values = new HashMap<>();
+                values.put("client_id", clientId);
+                values.put("scope", ONEDRIVE_SCOPE);
+                JSONObject device = postMicrosoftForm(MICROSOFT_CONSUMERS + "devicecode", values);
+                if (device.has("error")) throw new Exception(device.optString("error_description", device.optString("error")));
+                String deviceCode = device.optString("device_code", "");
+                String userCode = device.optString("user_code", "");
+                String verificationUri = device.optString("verification_uri", "https://microsoft.com/devicelogin");
+                int expiresIn = device.optInt("expires_in", 900);
+                int interval = Math.max(3, device.optInt("interval", 5));
+                String message = device.optString("message",
+                    "Open " + verificationUri + " and enter this code: " + userCode);
+                if (deviceCode.isEmpty() || userCode.isEmpty()) throw new Exception("Microsoft did not return a sign-in code. Check the Client ID and app registration.");
+                runOnUiThread(() -> new AlertDialog.Builder(this)
+                    .setTitle("Sign in to OneDrive")
+                    .setMessage(message + "\n\nAfter you approve access, AI OMNIVERSE will finish sign-in and sync your chat history. Your Microsoft password is entered only on Microsoft's page.")
+                    .setPositiveButton("OPEN MICROSOFT SIGN-IN", (dialog, which) -> {
+                        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(verificationUri))); }
+                        catch (Exception e) {
+                            Toast.makeText(this, "Open microsoft.com/devicelogin and enter the code shown here.", Toast.LENGTH_LONG).show();
+                        }
+                        showOneDrivePollingDialog(clientId, deviceCode, expiresIn, interval);
+                    })
+                    .setNegativeButton("CANCEL", (dialog, which) -> { oneDriveLoginCancelled = true; })
+                    .show());
+            } catch (Exception e) {
+                String error = safeError(e);
+                runOnUiThread(() -> showOneDriveAuthError("Couldn't start Microsoft sign-in", error));
+            }
+        });
+    }
+
+    private void showOneDrivePollingDialog(String clientId, String deviceCode, int expiresIn, int interval) {
+        oneDriveLoginCancelled = false;
+        AlertDialog waiting = new AlertDialog.Builder(this)
+            .setTitle("Waiting for Microsoft")
+            .setMessage("Finish signing in in your browser. AI OMNIVERSE will automatically detect approval and connect OneDrive. Keep this screen open for a moment.")
+            .setNegativeButton("CANCEL SIGN-IN", (dialog, which) -> { oneDriveLoginCancelled = true; })
+            .create();
+        waiting.setCancelable(false);
+        waiting.show();
+        authExecutor.execute(() -> {
+            try {
+                long deadline = System.currentTimeMillis() + Math.max(60, expiresIn) * 1000L;
+                int pollInterval = interval;
+                JSONObject token = null;
+                while (!oneDriveLoginCancelled && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(pollInterval * 1000L);
+                    if (oneDriveLoginCancelled) break;
+                    Map<String, String> values = new HashMap<>();
+                    values.put("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
+                    values.put("client_id", clientId);
+                    values.put("device_code", deviceCode);
+                    JSONObject response = postMicrosoftForm(MICROSOFT_CONSUMERS + "token", values);
+                    if (response.has("access_token")) {
+                        token = response;
+                        break;
+                    }
+                    String error = response.optString("error", "");
+                    if ("authorization_pending".equals(error)) continue;
+                    if ("slow_down".equals(error)) { pollInterval += 5; continue; }
+                    if ("authorization_declined".equals(error)) throw new Exception("Microsoft sign-in was declined.");
+                    if ("expired_token".equals(error) || "code_expired".equals(error)) throw new Exception("The sign-in code expired. Start again to get a new code.");
+                    throw new Exception(response.optString("error_description",
+                        error.isEmpty() ? "Microsoft sign-in did not complete." : error));
+                }
+                if (oneDriveLoginCancelled) throw new Exception("Sign-in cancelled.");
+                if (token == null) throw new Exception("The Microsoft sign-in code expired. Please try again.");
+                saveMicrosoftTokens(token, clientId);
+                completeOneDriveSignIn(token.optString("access_token", ""), waiting);
+            } catch (Exception e) {
+                String error = safeError(e);
+                runOnUiThread(() -> {
+                    if (waiting.isShowing()) waiting.dismiss();
+                    if (!oneDriveLoginCancelled) showOneDriveAuthError("Microsoft sign-in didn't finish", error);
+                });
+            }
+        });
+    }
+
+    private void saveMicrosoftTokens(JSONObject token, String clientId) throws Exception {
+        String access = token.optString("access_token", "");
+        String refresh = token.optString("refresh_token", "");
+        if (access.isEmpty() || refresh.isEmpty())
+            throw new Exception("Microsoft didn't return the access and refresh tokens. Check that offline_access is enabled for this app.");
+        long expiresAt = System.currentTimeMillis() + token.optLong("expires_in", 3600L) * 1000L;
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString(ONEDRIVE_CLIENT_ID_PREF, clientId)
+            .putString(ONEDRIVE_ACCESS_TOKEN_PREF, encryptKey(access))
+            .putString(ONEDRIVE_REFRESH_TOKEN_PREF, encryptKey(refresh))
+            .putLong(ONEDRIVE_TOKEN_EXPIRY_PREF, expiresAt)
+            .remove(ONEDRIVE_LAST_ERROR_PREF).apply();
+    }
+
+    private void completeOneDriveSignIn(String accessToken, AlertDialog waiting) {
+        try {
+            String accountName = "Microsoft account";
+            String accountEmail = "";
+            try {
+                JSONObject profile = getMicrosoftGraphJson(
+                    "https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName", accessToken);
+                accountName = profile.optString("displayName", accountName);
+                accountEmail = profile.optString("mail", profile.optString("userPrincipalName", ""));
+            } catch (Exception ignored) {
+                // The core backup flow can still work if profile details aren't returned.
+            }
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(ONEDRIVE_ACCOUNT_NAME_PREF, accountName)
+                .putString(ONEDRIVE_ACCOUNT_EMAIL_PREF, accountEmail).apply();
+
+            String folderId = getOneDriveAppFolderId(accessToken);
+            JSONArray children = getMicrosoftGraphJson(
+                "https://graph.microsoft.com/v1.0/me/drive/items/" + Uri.encode(folderId) + "/children?$select=id,name", accessToken)
+                .optJSONArray("value");
+            List<SavedChat> remoteChats = new ArrayList<>();
+            boolean cloudFileExists = false;
+            if (children != null) {
+                for (int i = 0; i < children.length(); i++) {
+                    JSONObject item = children.optJSONObject(i);
+                    if (item != null && ONEDRIVE_HISTORY_FILE.equals(item.optString("name", ""))) {
+                        cloudFileExists = true;
+                        String remoteJson = downloadMicrosoftGraphText(
+                            "https://graph.microsoft.com/v1.0/me/drive/items/" + Uri.encode(item.optString("id", "")) + "/content",
+                            accessToken);
+                        remoteChats = parseChats(remoteJson);
+                        break;
+                    }
+                }
+            }
+            final List<SavedChat> imported = remoteChats;
+            final boolean hadCloudHistory = cloudFileExists;
+            final String displayAccount = accountEmail.isEmpty() ? accountName : accountEmail;
+            runOnUiThread(() -> {
+                if (waiting.isShowing()) waiting.dismiss();
+                mergeOneDriveChats(imported);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(ONEDRIVE_LAST_ERROR_PREF).apply();
+                updateCloudBackupStatus();
+                if (hadCloudHistory) {
+                    Toast.makeText(this, "OneDrive history restored and merged with this phone.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Signed in to OneDrive. Your chat history will now sync automatically.", Toast.LENGTH_LONG).show();
+                }
+                saveLocalChats();
+                updateCloudBackupStatus();
+            });
+        } catch (Exception e) {
+            String error = safeError(e);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ONEDRIVE_LAST_ERROR_PREF, error).apply();
+            runOnUiThread(() -> {
+                if (waiting.isShowing()) waiting.dismiss();
+                updateCloudBackupStatus();
+                showOneDriveAuthError("Signed in, but history couldn't sync", error
+                    + "\n\nYour local conversations have been kept. The app did not overwrite the cloud history.");
+            });
+        }
+    }
+
+    private void mergeOneDriveChats(List<SavedChat> remoteChats) {
+        for (SavedChat remote : remoteChats) {
+            SavedChat local = findSavedChat(remote.id);
+            if (local == null) {
+                savedChats.add(remote);
+            } else if (remote.updatedAt > local.updatedAt) {
+                local.title = remote.title;
+                local.updatedAt = remote.updatedAt;
+                local.messages.clear();
+                local.messages.addAll(remote.messages);
+                if (remote.id.equals(activeChatId)) {
+                    history.clear();
+                    history.addAll(remote.messages);
+                    messagesColumn.removeAllViews();
+                    if (history.isEmpty()) renderWelcome();
+                    else {
+                        for (ChatMessage message : history) renderMessage(message);
+                        messagesScroll.post(() -> messagesScroll.fullScroll(View.FOCUS_DOWN));
+                    }
+                }
+            }
+        }
+        Collections.sort(savedChats, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
+        while (savedChats.size() > 30) savedChats.remove(savedChats.size() - 1);
+    }
+
+    private void signOutOfOneDrive() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .remove(ONEDRIVE_ACCESS_TOKEN_PREF)
+            .remove(ONEDRIVE_REFRESH_TOKEN_PREF)
+            .remove(ONEDRIVE_TOKEN_EXPIRY_PREF)
+            .remove(ONEDRIVE_ACCOUNT_NAME_PREF)
+            .remove(ONEDRIVE_ACCOUNT_EMAIL_PREF)
+            .remove(ONEDRIVE_LAST_SYNC_PREF)
+            .remove(ONEDRIVE_LAST_ERROR_PREF)
+            .apply();
+        updateCloudBackupStatus();
+        Toast.makeText(this, "Signed out of OneDrive. Local conversations were kept.", Toast.LENGTH_LONG).show();
+    }
+
+    private void showOneDriveAuthError(String title, String message) {
+        new AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
+    private JSONObject postMicrosoftForm(String endpoint, Map<String, String> values) throws Exception {
+        StringBuilder form = new StringBuilder();
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            if (form.length() > 0) form.append('&');
+            form.append(URLEncoder.encode(entry.getKey(), "UTF-8"));
+            form.append('=');
+            form.append(URLEncoder.encode(entry.getValue(), "UTF-8"));
+        }
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(20000);
+            connection.setReadTimeout(30000);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setDoOutput(true);
+            byte[] payload = form.toString().getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(payload.length);
+            try (OutputStream output = connection.getOutputStream()) { output.write(payload); }
+            int code = connection.getResponseCode();
+            InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
+            String response = readAll(stream);
+            if (response.trim().isEmpty()) throw new Exception("Microsoft returned an empty authentication response (HTTP " + code + ").");
+            return new JSONObject(response);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private JSONObject getMicrosoftGraphJson(String endpoint, String accessToken) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(20000);
+            connection.setReadTimeout(30000);
+            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+            connection.setRequestProperty("Accept", "application/json");
+            int code = connection.getResponseCode();
+            InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
+            String response = readAll(stream);
+            if (code < 200 || code >= 300) {
+                String detail = response;
+                try {
+                    JSONObject errorJson = new JSONObject(response);
+                    JSONObject error = errorJson.optJSONObject("error");
+                    detail = errorJson.optString("error_description",
+                        error == null ? response : error.optString("message", response));
+                } catch (Exception ignored) {}
+                throw new Exception("OneDrive API HTTP " + code + ": " + (detail.length() > 240 ? detail.substring(0, 240) : detail));
+            }
+            return new JSONObject(response);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private String downloadMicrosoftGraphText(String endpoint, String accessToken) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(20000);
+            connection.setReadTimeout(30000);
+            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+            int code = connection.getResponseCode();
+            if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM
+                || code == 303 || code == 307 || code == 308) {
+                String location = connection.getHeaderField("Location");
+                connection.disconnect();
+                if (location == null || location.isEmpty()) throw new Exception("OneDrive returned a download redirect without a location.");
+                HttpURLConnection download = null;
+                try {
+                    download = (HttpURLConnection) new URL(location).openConnection();
+                    download.setRequestMethod("GET");
+                    download.setConnectTimeout(20000);
+                    download.setReadTimeout(30000);
+                    int downloadCode = download.getResponseCode();
+                    if (downloadCode < 200 || downloadCode >= 300) throw new Exception("OneDrive backup download failed (HTTP " + downloadCode + ").");
+                    return readAll(download.getInputStream());
+                } finally {
+                    if (download != null) download.disconnect();
+                }
+            }
+            if (code < 200 || code >= 300) throw new Exception("OneDrive backup download failed (HTTP " + code + ").");
+            return readAll(connection.getInputStream());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private String getOneDriveAppFolderId(String accessToken) throws Exception {
+        JSONObject folder = getMicrosoftGraphJson("https://graph.microsoft.com/v1.0/me/drive/special/approot", accessToken);
+        String id = folder.optString("id", "");
+        if (id.isEmpty()) throw new Exception("Microsoft Graph didn't return the OneDrive app-folder ID.");
+        return id;
+    }
+
+    private String getValidMicrosoftAccessToken() throws Exception {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String encryptedAccess = prefs.getString(ONEDRIVE_ACCESS_TOKEN_PREF, "");
+        long expiry = prefs.getLong(ONEDRIVE_TOKEN_EXPIRY_PREF, 0L);
+        if (!encryptedAccess.isEmpty() && expiry > System.currentTimeMillis() + 60000L) {
+            try { return decryptKey(encryptedAccess); } catch (Exception ignored) {}
+        }
+        String encryptedRefresh = prefs.getString(ONEDRIVE_REFRESH_TOKEN_PREF, "");
+        String clientId = prefs.getString(ONEDRIVE_CLIENT_ID_PREF, "");
+        if (encryptedRefresh.isEmpty() || clientId.isEmpty()) throw new Exception("Please sign in to OneDrive again.");
+        Map<String, String> values = new HashMap<>();
+        values.put("client_id", clientId);
+        values.put("grant_type", "refresh_token");
+        values.put("refresh_token", decryptKey(encryptedRefresh));
+        values.put("scope", ONEDRIVE_SCOPE);
+        JSONObject response = postMicrosoftForm(MICROSOFT_CONSUMERS + "token", values);
+        if (response.has("error")) throw new Exception(response.optString("error_description", "Microsoft sign-in expired. Sign in to OneDrive again."));
+        String access = response.optString("access_token", "");
+        if (access.isEmpty()) throw new Exception("Microsoft did not return a refreshed access token.");
+        String refresh = response.optString("refresh_token", "");
+        if (refresh.isEmpty()) refresh = decryptKey(encryptedRefresh);
+        long newExpiry = System.currentTimeMillis() + response.optLong("expires_in", 3600L) * 1000L;
+        prefs.edit()
+            .putString(ONEDRIVE_ACCESS_TOKEN_PREF, encryptKey(access))
+            .putString(ONEDRIVE_REFRESH_TOKEN_PREF, encryptKey(refresh))
+            .putLong(ONEDRIVE_TOKEN_EXPIRY_PREF, newExpiry)
+            .apply();
+        return access;
+    }
+
+    private void uploadOneDriveHistory(String json, String accessToken) throws Exception {
+        String folderId = getOneDriveAppFolderId(accessToken);
+        String endpoint = "https://graph.microsoft.com/v1.0/me/drive/items/"
+            + Uri.encode(folderId) + ":/" + ONEDRIVE_HISTORY_FILE + ":/content";
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setRequestMethod("PUT");
+            connection.setConnectTimeout(20000);
+            connection.setReadTimeout(30000);
+            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setDoOutput(true);
+            byte[] payload = json.getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(payload.length);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(payload);
+                output.flush();
+            }
+            int code = connection.getResponseCode();
+            InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
+            String response = readAll(stream);
+            if (code < 200 || code >= 300) throw new Exception("OneDrive upload failed (HTTP " + code + "): " + (response.length() > 240 ? response.substring(0, 240) : response));
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
     private void promptToConnectProvider(Provider provider) {
         configPanel.setAlpha(1f);
         configPanel.setVisibility(View.VISIBLE);
