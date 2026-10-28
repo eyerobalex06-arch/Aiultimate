@@ -206,7 +206,7 @@ public class AiChatActivity extends Activity {
         root.addView(toolbar);
 
         View hairline = new View(this);
-        hairline.setBackgroundColor(Color.rgb(37, 40, 55));
+        hairline.setBackgroundColor(Color.rgb(64, 64, 64));
         root.addView(hairline, new LinearLayout.LayoutParams(-1, dp(1)));
 
         LinearLayout modelBar = new LinearLayout(this);
@@ -276,9 +276,26 @@ public class AiChatActivity extends Activity {
         List<String> providerNames = new ArrayList<>();
         providerNames.add("Auto-switch (all saved providers)");
         for (Provider p : providers) providerNames.add(p.label);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, providerNames);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, providerNames) {
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                TextView item = (TextView) super.getView(position, convertView, parent);
+                item.setTextColor(WHITE);
+                item.setTextSize(12);
+                item.setPadding(dp(12), dp(7), dp(12), dp(7));
+                return item;
+            }
+            @Override public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                TextView item = (TextView) super.getDropDownView(position, convertView, parent);
+                item.setTextColor(WHITE);
+                item.setTextSize(13);
+                item.setPadding(dp(14), dp(12), dp(14), dp(12));
+                item.setBackgroundColor(Color.rgb(54, 54, 54));
+                return item;
+            }
+        };
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         providerSpinner.setAdapter(adapter);
+        providerSpinner.setBackground(round(Color.rgb(54, 54, 54), 12));
         LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(-1, dp(44));
         spinnerParams.topMargin = dp(5);
         configPanel.addView(providerSpinner, spinnerParams);
@@ -307,9 +324,9 @@ public class AiChatActivity extends Activity {
         LinearLayout configButtons = new LinearLayout(this);
         configButtons.setOrientation(LinearLayout.HORIZONTAL);
         configButtons.setGravity(Gravity.CENTER_VERTICAL);
-        saveButton = button("SAVE KEY", Color.rgb(91, 70, 164));
-        forgetButton = button("DELETE KEY", Color.rgb(44, 47, 70));
-        Button getKeyButton = button("GET KEY ↗", Color.rgb(44, 47, 70));
+        saveButton = button("SAVE KEY", PURPLE);
+        forgetButton = button("DELETE KEY", Color.rgb(60, 60, 60));
+        Button getKeyButton = button("GET KEY ↗", Color.rgb(60, 60, 60));
         configButtons.addView(saveButton, new LinearLayout.LayoutParams(0, dp(40), 1));
         LinearLayout.LayoutParams forgetParams = new LinearLayout.LayoutParams(0, dp(40), 1);
         forgetParams.leftMargin = dp(6);
@@ -356,7 +373,7 @@ public class AiChatActivity extends Activity {
         composer.setPadding(dp(10), dp(8), dp(10), dp(8));
         composer.setBackgroundColor(BG);
 
-        Button plusButton = button("＋", Color.rgb(31, 34, 50));
+        Button plusButton = button("＋", Color.rgb(54, 54, 54));
         plusButton.setTextSize(20);
         plusButton.setContentDescription("Chat tools");
         LinearLayout.LayoutParams plusParams = new LinearLayout.LayoutParams(dp(42), dp(48));
@@ -607,7 +624,7 @@ public class AiChatActivity extends Activity {
         welcome.setOrientation(LinearLayout.VERTICAL);
         welcome.setGravity(Gravity.CENTER_HORIZONTAL);
         welcome.setPadding(dp(8), dp(24), dp(8), dp(12));
-        TextView mark = text("✳", 38, PURPLE, true);
+        TextView mark = text("✦", 38, PURPLE, true);
         mark.setGravity(Gravity.CENTER);
         welcome.addView(mark, new LinearLayout.LayoutParams(-1, dp(54)));
         TextView title = text("What can I help with?", 25, WHITE, true);
@@ -627,7 +644,7 @@ public class AiChatActivity extends Activity {
             {"↗  Plan a project", "Help me plan a project from idea to finished result."}
         };
         for (String[] prompt : prompts) {
-            Button chip = button(prompt[0], Color.rgb(24, 28, 43));
+            Button chip = button(prompt[0], Color.rgb(47, 47, 47));
             chip.setTextSize(12);
             chip.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
             chip.setPadding(dp(14), 0, dp(12), 0);
@@ -1104,7 +1121,7 @@ public class AiChatActivity extends Activity {
         for (int i = 0; i < providers.size(); i++) names[i] = providers.get(i).label;
         new AlertDialog.Builder(this)
             .setTitle("Choose an API key provider")
-            .setMessage("All six providers are supported, including NVIDIA NIM. Choose where you want to create a key.")
+            .setMessage("All seven providers are supported, including DeepSeek and NVIDIA NIM. Choose where you want to create a key.")
             .setItems(names, (dialog, which) -> {
                 Provider selected = providers.get(which);
                 configPanel.setVisibility(View.VISIBLE);
@@ -1402,7 +1419,7 @@ public class AiChatActivity extends Activity {
         field.setHintTextColor(MUTED);
         field.setHint(hint);
         field.setPadding(dp(12), dp(6), dp(12), dp(6));
-        field.setBackground(round(Color.rgb(29, 33, 51), 12));
+        field.setBackground(round(Color.rgb(58, 58, 58), 12));
         field.setSingleLine(true);
         if (password) field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         else field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
