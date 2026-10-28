@@ -57,3 +57,8 @@ Official account/key pages:
 ## Build
 
 The GitHub Actions workflow builds a debug APK using Gradle and Android SDK 35. A successful build proves compilation/package creation, not that every remote API works on every account/device. Real API requests require provider keys, internet access, and service availability.
+
+
+### Per-model API key storage and chat navigation
+- API keys are encrypted on-device and stored separately for each provider + model ID pair. Saving a key for one model does not overwrite another model's key. The chat toolbar's three-dot menu includes add/change, official provider key pages, delete current model key, and jump-to-top/bottom shortcuts.
+- Use the TOP and BOTTOM controls beneath the conversation to scroll through chat history. The model search field is now nearer the top of the home screen.
