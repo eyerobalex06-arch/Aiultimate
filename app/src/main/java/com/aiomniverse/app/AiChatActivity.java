@@ -61,7 +61,7 @@ public class AiChatActivity extends Activity {
         new Provider("openrouter", "OpenRouter Free Models", "https://openrouter.ai/api/v1/chat/completions",
             "https://openrouter.ai/settings/keys", "openrouter/free", false),
         new Provider("gemini", "Google Gemini API", "https://generativelanguage.googleapis.com/v1beta/models/",
-            "https://aistudio.google.com/apikey", "gemini-2.5-flash", true),
+            "https://aistudio.google.com/apikey", "gemini-3.5-flash-lite", true),
         new Provider("groq", "GroqCloud API", "https://api.groq.com/openai/v1/chat/completions",
             "https://console.groq.com/keys", "llama-3.3-70b-versatile", false),
         new Provider("cerebras", "Cerebras Inference API", "https://api.cerebras.ai/v1/chat/completions",
@@ -303,22 +303,20 @@ public class AiChatActivity extends Activity {
         Provider p = providers.get(currentProviderIndex - 1);
         String key = keyInput.getText().toString().trim();
         String model = modelInput.getText().toString().trim();
-        if (key.isEmpty()) {
-            Toast.makeText(this, "Paste an API key first. It is saved only on this device.", Toast.LENGTH_LONG).show();
-            return;
-        }
         try {
-            String encrypted = encryptKey(key);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putString(KEY_PREFIX + p.id, encrypted)
-                .putString(MODEL_KEY_PREFIX + p.id, model.isEmpty() ? p.defaultModel : model)
-                .apply();
+            android.content.SharedPreferences.Editor editor = getSharedPreferences(PREFS, MODE_PRIVATE).edit();
+            if (!key.isEmpty()) editor.putString(KEY_PREFIX + p.id, encryptKey(key));
+            else if (getPreferences(KEY_PREFIX + p.id, "").isEmpty()) {
+                Toast.makeText(this, "Paste an API key first. It is saved only on this device.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            editor.putString(MODEL_KEY_PREFIX + p.id, model.isEmpty() ? p.defaultModel : model).apply();
             keyInput.setText("");
-            keyInput.setHint("Saved securely. Paste again only to replace it.");
-            Toast.makeText(this, p.label + " key saved encrypted on this device.", Toast.LENGTH_LONG).show();
+            keyInput.setHint("Key saved encrypted. Paste again only to replace it.");
+            Toast.makeText(this, "Settings saved for " + p.label + ". The API key remains encrypted on this device.", Toast.LENGTH_LONG).show();
             updateConnectionStatus();
         } catch (Exception e) {
-            Toast.makeText(this, "Could not encrypt the key on this device: " + safeError(e), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Could not save settings: " + safeError(e), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -431,6 +429,7 @@ public class AiChatActivity extends Activity {
             for (int i = start; i < messages.size(); i++) {
                 ChatMessage m = messages.get(i);
                 if (!m.role.equals("user") && !m.role.equals("assistant")) continue;
+                if (m.source.equals("AI OMNIVERSE") || m.source.equals("ROUTER")) continue;
                 JSONObject item = new JSONObject();
                 item.put("role", m.role.equals("assistant") ? "model" : "user");
                 JSONArray parts = new JSONArray();
@@ -445,6 +444,7 @@ public class AiChatActivity extends Activity {
             for (int i = start; i < messages.size(); i++) {
                 ChatMessage m = messages.get(i);
                 if (!m.role.equals("user") && !m.role.equals("assistant")) continue;
+                if (m.source.equals("AI OMNIVERSE") || m.source.equals("ROUTER")) continue;
                 apiMessages.put(new JSONObject().put("role", m.role).put("content", m.text));
             }
             request.put("messages", apiMessages);
