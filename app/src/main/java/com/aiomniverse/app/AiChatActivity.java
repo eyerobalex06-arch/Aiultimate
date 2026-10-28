@@ -209,8 +209,29 @@ public class AiChatActivity extends Activity {
         configPanel.setBackground(round(PANEL, 16));
         configPanel.setVisibility(View.GONE);
 
+        LinearLayout settingsHeading = new LinearLayout(this);
+        settingsHeading.setOrientation(LinearLayout.HORIZONTAL);
+        settingsHeading.setGravity(Gravity.CENTER_VERTICAL);
         TextView configHeading = text("PROVIDER & API KEY SETTINGS", 11, PURPLE, true);
-        configPanel.addView(configHeading);
+        settingsHeading.addView(configHeading, new LinearLayout.LayoutParams(0, -2, 1));
+        Button closeSettingsButton = button("×", Color.TRANSPARENT);
+        closeSettingsButton.setTextSize(20);
+        closeSettingsButton.setContentDescription("Close provider settings");
+        settingsHeading.addView(closeSettingsButton, new LinearLayout.LayoutParams(dp(36), dp(32)));
+        closeSettingsButton.setOnClickListener(v -> {
+            configPanel.animate().alpha(0f).setDuration(120).withEndAction(() -> {
+                configPanel.setVisibility(View.GONE);
+                configPanel.setAlpha(1f);
+            }).start();
+            View focused = getCurrentFocus();
+            if (focused != null) {
+                android.view.inputmethod.InputMethodManager keyboard =
+                    (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (keyboard != null) keyboard.hideSoftInputFromWindow(focused.getWindowToken(), 0);
+                focused.clearFocus();
+            }
+        });
+        configPanel.addView(settingsHeading);
 
         providerSpinner = new Spinner(this);
         List<String> providerNames = new ArrayList<>();
@@ -409,12 +430,18 @@ public class AiChatActivity extends Activity {
                 providerSpinner.setSelection(which);
                 currentProviderIndex = which;
                 updateModelPickerLabel();
+                if (which > 0 && !isProviderConfigured(providers.get(which - 1))) {
+                    configPanel.setAlpha(1f);
+                    configPanel.setVisibility(View.VISIBLE);
+                    Toast.makeText(this, "Add an API key to use this provider.", Toast.LENGTH_SHORT).show();
+                }
             })
             .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss())
             .show();
     }
 
     private void showKeySettings() {
+        configPanel.setAlpha(1f);
         configPanel.setVisibility(View.VISIBLE);
         if (currentProviderIndex == 0) providerSpinner.setSelection(1);
         Toast.makeText(this, "Saved keys are encrypted on this device. Choose a provider below.", Toast.LENGTH_LONG).show();
