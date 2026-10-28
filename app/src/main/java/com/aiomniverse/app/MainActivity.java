@@ -91,7 +91,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(8);
         hero.addView(headline, hp);
-        TextView subtitle = text("Explore model families, then open a real multi-provider chat that can switch between configured free AI services.", 13, Color.rgb(207, 211, 231), false);
+        TextView subtitle = text("Explore model families, then chat with configured free cloud AI providers. Automatic failover can reduce interruptions, but provider quotas still apply.", 13, Color.rgb(207, 211, 231), false);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
         sp.topMargin = dp(9);
         hero.addView(subtitle, sp);
@@ -169,7 +169,7 @@ public class MainActivity extends Activity {
         list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         page.addView(list);
-        TextView footer = text("AI OMNIVERSE  •  Multi-provider chat includes free-tier APIs. Provider accounts and limits still apply.", 11, muted, false);
+        TextView footer = text("AI OMNIVERSE • Free cloud tiers only when available. Provider quotas, model access, and availability can change; no unlimited-use guarantee.", 11, muted, false);
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(18);
         footer.setGravity(Gravity.CENTER);
