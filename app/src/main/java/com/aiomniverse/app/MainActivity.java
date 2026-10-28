@@ -109,6 +109,18 @@ public class MainActivity extends Activity {
         liveChat.setOnClickListener(v -> startActivity(new Intent(this, AiChatActivity.class)));
         page.addView(liveChat, liveChatParams);
 
+        Button agentHub = new Button(this);
+        agentHub.setText("OPEN AI AGENT GROUP  ✦");
+        agentHub.setTextSize(13);
+        agentHub.setTextColor(white);
+        agentHub.setAllCaps(false);
+        agentHub.setTypeface(Typeface.DEFAULT_BOLD);
+        agentHub.setBackground(gradient(new int[]{Color.rgb(40, 85, 105), Color.rgb(38, 54, 91)}, 16));
+        LinearLayout.LayoutParams agentHubParams = new LinearLayout.LayoutParams(-1, dp(50));
+        agentHubParams.topMargin = dp(8);
+        agentHub.setOnClickListener(v -> startActivity(new Intent(this, AgentWorkspaceActivity.class)));
+        page.addView(agentHub, agentHubParams);
+
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.setPadding(0, dp(14), 0, dp(18));
