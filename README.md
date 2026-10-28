@@ -1,24 +1,26 @@
 # AI OMNIVERSE
 
-A polished Android AI model explorer. Each model card labels its practical strengths, including coding, reasoning, writing, local/on-device use, research, image generation, and audio transcription.
+AI OMNIVERSE is an Android app for exploring AI model families and opening a live hosted AI chat experience from one interface.
 
-## Download the Android app
+## Download the APK
 
-After the GitHub Actions build succeeds, download the installable debug APK from:
+The build workflow creates a debug APK and publishes it here after a successful build:
 
 - [Latest APK release](https://github.com/eyerobalex06-arch/Aiultimate/releases/tag/latest-build)
-- [Build workflow and logs](https://github.com/eyerobalex06-arch/Aiultimate/actions/workflows/android.yml)
+- [Build status and logs](https://github.com/eyerobalex06-arch/Aiultimate/actions/workflows/android.yml)
 
-Every push to `main` triggers a build. A successful run uploads the APK and updates the latest-build release.
+## Features
 
-## Current features
+- Dark, purple, mobile-first model explorer
+- Search model families, strengths, tasks, and modality
+- Filters for Coding, Reasoning, Fast, Images, Audio, Local, and Research
+- Individual model cards explaining likely strengths and trade-offs
+- In-app Live AI Chat screen powered by the hosted Hugging Face Chat website
+- Remembers web chat cookies as supported by Android WebView
+- Reopen/retry the hosted chat when the network is available
 
-- Dark, purple, mobile-friendly interface
-- Search model names, skills, and tasks
-- Filter by Coding, Reasoning, Fast, Images, Audio, Local, and Research
-- Model detail panels with strengths, modality, and notes
-- Android launcher icon
+## Important boundaries
 
-## Important
+The catalog's model cards are a guide to model families. They do not mean every listed model is installed locally or directly connected to this app. The Live AI Chat screen opens Hugging Face's hosted chat service inside the app; Hugging Face account requirements, model availability, rate limits, and terms are controlled by that service. This is not an offline multi-model engine, and it does not contain private provider API keys.
 
-This initial build is a **model discovery directory**, not a live multi-provider AI chat client yet. It does not claim that listed models are connected or running in the app. Live chat requires adding provider integrations and securely configuring access. Model strengths are practical guidance, not a universal benchmark ranking, and vary by model version.
+Strength labels are practical guidance, not a universal benchmark ranking. Specific strengths vary by model version and task.
