@@ -173,6 +173,7 @@ public class AiChatActivity extends Activity {
         updateModelPickerLabel();
         updateWebSearchButton();
         updateCloudBackupStatus();
+        if (getIntent().getBooleanExtra("open_onedrive_signin", false)) showBackupOptions();
     }
 
     private void buildUi() {
@@ -383,7 +384,16 @@ public class AiChatActivity extends Activity {
             PopupMenu tools = new PopupMenu(this, v);
             tools.getMenu().add("New chat").setOnMenuItemClickListener(item -> { startNewChat(true); return true; });
             tools.getMenu().add("Manage API keys").setOnMenuItemClickListener(item -> { showKeySettings(); return true; });
-            tools.getMenu().add("OneDrive history backup").setOnMenuItemClickListener(item -> { showBackupOptions(); return true; });
+            tools.getMenu().add("OneDrive history backup / sign in").setOnMenuItemClickListener(item -> { showBackupOptions(); return true; });
+            if (isMicrosoftOneDriveSignedIn()) {
+                tools.getMenu().add("Sign out of OneDrive").setOnMenuItemClickListener(item -> {
+                    new AlertDialog.Builder(this).setTitle("Sign out of OneDrive?")
+                        .setMessage("This signs out of cloud sync on this phone. Your local conversations and the backup already stored in OneDrive will remain.")
+                        .setPositiveButton("SIGN OUT", (dialog, which) -> signOutOfOneDrive())
+                        .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss()).show();
+                    return true;
+                });
+            }
             tools.getMenu().add(webSearchEnabled ? "Turn web search off" : "Turn web search on").setOnMenuItemClickListener(item -> { toggleWebSearchMode(); return true; });
             tools.show();
         });
@@ -1252,10 +1262,12 @@ public class AiChatActivity extends Activity {
     }
 
     private void queueOneDriveBackup(String json) {
-        String target = getSharedPreferences(PREFS, MODE_PRIVATE).getString(ONEDRIVE_BACKUP_URI_PREF, "");
-        if (target.isEmpty()) return;
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String target = prefs.getString(ONEDRIVE_BACKUP_URI_PREF, "");
+        boolean useMicrosoftSignIn = isMicrosoftOneDriveSignedIn();
+        if (!useMicrosoftSignIn && target.isEmpty()) return;
         final String snapshot = json;
-        final Uri uri = Uri.parse(target);
+        final Uri uri = target.isEmpty() ? null : Uri.parse(target);
         runOnUiThread(() -> {
             if (cloudSyncStatus != null) {
                 cloudSyncStatus.setText("☁  Syncing conversation history to OneDrive…");
@@ -1265,12 +1277,17 @@ public class AiChatActivity extends Activity {
         try {
             backupExecutor.execute(() -> {
                 try {
-                    try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
-                        if (output == null) throw new Exception("No output stream for the backup file.");
-                        output.write(snapshot.getBytes(StandardCharsets.UTF_8));
-                        output.flush();
+                    if (isMicrosoftOneDriveSignedIn()) {
+                        String accessToken = getValidMicrosoftAccessToken();
+                        uploadOneDriveHistory(snapshot, accessToken);
+                    } else {
+                        try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
+                            if (output == null) throw new Exception("No output stream for the backup file.");
+                            output.write(snapshot.getBytes(StandardCharsets.UTF_8));
+                            output.flush();
+                        }
                     }
-                    // Mark synced only after the provider's output stream has closed successfully.
+                    // Mark synced only after the Graph upload or file write has finished successfully.
                     lastBackupError = "";
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                         .putLong(ONEDRIVE_LAST_SYNC_PREF, System.currentTimeMillis())
@@ -1284,17 +1301,17 @@ public class AiChatActivity extends Activity {
                         runOnUiThread(() -> {
                             updateCloudBackupStatus();
                             Toast.makeText(this,
-                                "OneDrive backup didn't finish. Your conversation is still saved on this phone. Check the selected backup location.",
+                                "OneDrive sync didn't finish. Your conversation is still saved on this phone. Tap the cloud status for details.",
                                 Toast.LENGTH_LONG).show();
                         });
                     } else {
                         runOnUiThread(this::updateCloudBackupStatus);
                     }
-                    android.util.Log.w("AIOMNIVERSE", "Cloud backup failed", e);
+                    android.util.Log.w("AIOMNIVERSE", "OneDrive history sync failed", e);
                 }
             });
         } catch (Exception e) {
-            android.util.Log.w("AIOMNIVERSE", "Cloud backup task couldn't be queued", e);
+            android.util.Log.w("AIOMNIVERSE", "OneDrive history task couldn't be queued", e);
         }
     }
 
@@ -1458,7 +1475,16 @@ public class AiChatActivity extends Activity {
                 configPanel.setVisibility(configPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
                 return true;
             });
-        menu.getMenu().add("Set up / change OneDrive backup").setOnMenuItemClickListener(item -> { showBackupOptions(); return true; });
+        menu.getMenu().add("OneDrive account / chat history").setOnMenuItemClickListener(item -> { showBackupOptions(); return true; });
+        if (isMicrosoftOneDriveSignedIn()) {
+            menu.getMenu().add("Sign out of OneDrive").setOnMenuItemClickListener(item -> {
+                new AlertDialog.Builder(this).setTitle("Sign out of OneDrive?")
+                    .setMessage("Your local conversations and the backup already stored in OneDrive will remain.")
+                    .setPositiveButton("SIGN OUT", (dialog, which) -> signOutOfOneDrive())
+                    .setNegativeButton("CANCEL", (dialog, which) -> dialog.dismiss()).show();
+                return true;
+            });
+        }
         menu.getMenu().add(webSearchEnabled ? "Turn web search off" : "Turn web search on").setOnMenuItemClickListener(item -> { toggleWebSearchMode(); return true; });
         menu.getMenu().add("Restore conversations from backup").setOnMenuItemClickListener(item -> { restoreBackupFromFile(); return true; });
 
