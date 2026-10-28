@@ -22,11 +22,12 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 
 ## Getting started
 
-1. Install AI OMNIVERSE on Android and open **OPEN MULTI-AI CHAT** or **OPEN AI AGENT GROUP**.
-2. Select **OpenRouter Free Models**, then tap **GET FREE KEY** to create an OpenRouter API key.
-3. Return to the app, paste the key and press **SAVE KEY**. The app encrypts the key on this device.
-4. Send a message. The default OpenRouter model is `openrouter/free`, which selects from currently available free models.
-5. For additional fallback options, configure Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM using each provider's official key page, then select **Auto-switch**. Only use free access unless you intentionally choose to pay.
+1. Open AI OMNIVERSE. The home screen now has **GET API KEY** and **ADD API KEY** actions above **OPEN MULTI-AI CHAT**.
+2. Tap **GET API KEY**, choose a provider, and create your own key on that provider's official website. AI OMNIVERSE cannot generate third-party API keys on the provider's behalf.
+3. Return to AI OMNIVERSE and tap **ADD API KEY**. The app opens the provider form with OpenRouter selected. Choose the provider you created a key for, paste the key, and press **SAVE KEY**.
+4. The key is encrypted on this device. Select **Auto-switch** to let the app try your saved providers in order.
+5. Send a message. The default OpenRouter model is `openrouter/free`, which selects from currently available free models.
+6. For additional fallback options, configure Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM using **GET API KEY** or **GET FREE KEY**. Only use free access unless you intentionally choose to pay.
 
 Official account/key pages:
 - OpenRouter: https://openrouter.ai/settings/keys
