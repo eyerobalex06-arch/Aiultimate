@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
         brand.addView(text("AI OMNIVERSE", 17, white, true));
-        brand.addView(text("MODEL EXPLORER  •  v1.0", 10, muted, true));
+        brand.addView(text("FREE AI HUB  •  v2.0", 10, muted, true));
         top.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
         TextView badge = text("BETA", 10, purple, true);
         badge.setPadding(dp(10), dp(7), dp(10), dp(7));
@@ -91,14 +91,14 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(8);
         hero.addView(headline, hp);
-        TextView subtitle = text("Compare strengths, discover specialist models, and choose the right tool instead of throwing every task at one chatbot.", 13, Color.rgb(207, 211, 231), false);
+        TextView subtitle = text("Explore model families, then open a real multi-provider chat that can switch between configured free AI services.", 13, Color.rgb(207, 211, 231), false);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
         sp.topMargin = dp(9);
         hero.addView(subtitle, sp);
         page.addView(hero);
 
         Button liveChat = new Button(this);
-        liveChat.setText("OPEN LIVE AI CHAT  ↗");
+        liveChat.setText("OPEN MULTI-AI CHAT  ↗");
         liveChat.setTextSize(13);
         liveChat.setTextColor(white);
         liveChat.setAllCaps(false);
@@ -169,7 +169,7 @@ public class MainActivity extends Activity {
         list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         page.addView(list);
-        TextView footer = text("AI OMNIVERSE  •  Model directory only. Live AI access depends on a connected provider or hosted service.", 11, muted, false);
+        TextView footer = text("AI OMNIVERSE  •  Multi-provider chat includes free-tier APIs. Provider accounts and limits still apply.", 11, muted, false);
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(18);
         footer.setGravity(Gravity.CENTER);
