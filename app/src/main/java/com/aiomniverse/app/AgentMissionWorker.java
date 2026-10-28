@@ -63,23 +63,35 @@ public class AgentMissionWorker extends Worker {
         String missionId = getInputData().getString("mission_id");
         String prompt = getInputData().getString("prompt");
         String agentsText = getInputData().getString("agents_json");
-        if (missionId == null || prompt == null || agentsText == null) return Result.failure();
+        int agentIndex = getInputData().getInt("agent_index", -1);
+        if (missionId == null || prompt == null || agentsText == null || agentIndex < 0) return Result.failure();
 
         SharedPreferences missions = getApplicationContext().getSharedPreferences(MISSION_PREFS, Context.MODE_PRIVATE);
-        String stored = missions.getString("mission_" + missionId, "");
         JSONObject mission;
         JSONArray logs;
         JSONArray agents;
         try {
+            String stored = missions.getString("mission_" + missionId, "");
             mission = stored.isEmpty() ? new JSONObject() : new JSONObject(stored);
-            mission.put("id", missionId);
-            mission.put("prompt", prompt);
-            mission.put("status", "RUNNING");
+            String status = mission.optString("status", "");
+            if ("NEEDS_SETUP".equals(status)) return Result.success();
             agents = new JSONArray(agentsText);
             logs = mission.optJSONArray("logs");
             if (logs == null) logs = new JSONArray();
+            mission.put("id", missionId);
+            mission.put("prompt", prompt);
             mission.put("agents", agents);
             mission.put("logs", logs);
+            if (agentIndex < logs.length()) {
+                if (logs.length() >= agents.length()) {
+                    mission.put("status", "COMPLETED");
+                    mission.put("current", "");
+                    saveMission(missions, mission);
+                }
+                return Result.success();
+            }
+            if (agentIndex >= agents.length()) return Result.success();
+            mission.put("status", "RUNNING");
             saveMission(missions, mission);
         } catch (Exception e) {
             return Result.failure();
@@ -96,83 +108,76 @@ public class AgentMissionWorker extends Worker {
             return Result.success();
         }
 
-        // Continue after any WorkManager retry/process restart instead of repeating saved agent replies.
-        for (int i = logs.length(); i < agents.length(); i++) {
-            if (isStopped()) return Result.retry();
-            JSONObject agent = agents.optJSONObject(i);
-            if (agent == null) continue;
-            String name = agent.optString("name", "Agent " + (i + 1));
-            String role = agent.optString("role", "Helpful assistant");
-            try {
-                mission.put("current", name);
-                mission.put("status", "RUNNING");
-                saveMission(missions, mission);
+        JSONObject agent = agents.optJSONObject(agentIndex);
+        if (agent == null) return Result.success();
+        String name = agent.optString("name", "Agent " + (agentIndex + 1));
+        String role = agent.optString("role", "Helpful assistant");
+        try {
+            mission.put("current", name);
+            mission.put("status", "RUNNING");
+            saveMission(missions, mission);
 
-                String context = buildContext(prompt, logs);
-                String instruction = "You are " + name + ", an AI agent in a shared multi-agent group chat. "
-                    + "Your role: " + role + ". Work on the user's task from your assigned perspective. "
-                    + "Read prior agent messages in the shared group transcript, improve on them, and point out useful disagreements or gaps. "
-                    + "Be practical and concrete. Do not claim you performed real-world actions or web research unless tools actually provided them. "
-                    + "Return a useful response that other agents can build on.\n\nUSER TASK:\n" + prompt
-                    + "\n\nSHARED GROUP TRANSCRIPT SO FAR:\n" + context;
+            String context = buildContext(prompt, logs);
+            String instruction = "You are " + name + ", an AI agent in a shared multi-agent group chat. "
+                + "Your role: " + role + ". Work on the user's task from your assigned perspective. "
+                + "Read prior agent messages in the shared group transcript, improve on them, and point out useful disagreements or gaps. "
+                + "Be practical and concrete. Do not claim you performed real-world actions or web research unless tools actually provided them. "
+                + "Return a useful response that other agents can build on.\\n\\nUSER TASK:\\n" + prompt
+                + "\\n\\nSHARED GROUP TRANSCRIPT SO FAR:\\n" + context;
 
-                String answer = null;
-                String usedProvider = "";
-                String errors = "";
-                for (int attempt = 0; attempt < configured.size(); attempt++) {
-                    Provider p = configured.get((i + attempt) % configured.size());
-                    try {
-                        SharedPreferences secretPrefs = getApplicationContext().getSharedPreferences(PROVIDER_PREFS, Context.MODE_PRIVATE);
-                        String key = decryptKey(secretPrefs.getString("encrypted_key_" + p.id, ""));
-                        if (key.trim().isEmpty()) continue;
-                        String model = secretPrefs.getString("model_" + p.id, p.defaultModel);
-                        answer = callProvider(p, key, model, instruction);
-                        usedProvider = p.label + " · " + model;
-                        break;
-                    } catch (Exception ex) {
-                        String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
-                        if (message.length() > 220) message = message.substring(0, 220);
-                        errors += (errors.isEmpty() ? "" : "\n") + p.label + ": " + message;
-                    }
+            String answer = null;
+            String usedProvider = "";
+            String errors = "";
+            for (int attempt = 0; attempt < configured.size(); attempt++) {
+                Provider p = configured.get((agentIndex + attempt) % configured.size());
+                try {
+                    SharedPreferences secretPrefs = getApplicationContext().getSharedPreferences(PROVIDER_PREFS, Context.MODE_PRIVATE);
+                    String key = decryptKey(secretPrefs.getString("encrypted_key_" + p.id, ""));
+                    if (key.trim().isEmpty()) continue;
+                    String model = secretPrefs.getString("model_" + p.id, p.defaultModel);
+                    answer = callProvider(p, key, model, instruction);
+                    usedProvider = p.label + " · " + model;
+                    break;
+                } catch (Exception ex) {
+                    String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+                    if (message.length() > 220) message = message.substring(0, 220);
+                    errors += (errors.isEmpty() ? "" : "\\n") + p.label + ": " + message;
                 }
+            }
 
+            JSONObject log = new JSONObject();
+            log.put("agent", name);
+            log.put("role", role);
+            log.put("provider", usedProvider);
+            if (answer == null || answer.trim().isEmpty()) {
+                log.put("text", "This agent could not get a reply.\\n" + (errors.isEmpty()
+                    ? "No saved provider key was available." : errors)
+                    + "\\nCheck provider quotas, model availability, and saved API-key settings.");
+                log.put("error", true);
+            } else {
+                log.put("text", answer.trim());
+                log.put("error", false);
+            }
+            logs.put(log);
+            mission.put("logs", logs);
+            mission.put("current", "");
+            mission.put("status", logs.length() >= agents.length() ? "COMPLETED" : "QUEUED");
+            saveMission(missions, mission);
+        } catch (Exception e) {
+            try {
                 JSONObject log = new JSONObject();
                 log.put("agent", name);
                 log.put("role", role);
-                log.put("provider", usedProvider);
-                if (answer == null || answer.trim().isEmpty()) {
-                    log.put("text", "This agent could not get a reply.\n" + (errors.isEmpty()
-                        ? "No saved provider key was available." : errors)
-                        + "\nCheck provider quotas, model availability, and saved API-key settings.");
-                    log.put("error", true);
-                } else {
-                    log.put("text", answer.trim());
-                    log.put("error", false);
-                }
+                log.put("provider", "");
+                log.put("text", "Agent error: " + safe(e));
+                log.put("error", true);
                 logs.put(log);
                 mission.put("logs", logs);
-                mission.put("current", name);
+                mission.put("current", "");
+                mission.put("status", logs.length() >= agents.length() ? "COMPLETED" : "QUEUED");
                 saveMission(missions, mission);
-            } catch (Exception e) {
-                try {
-                    JSONObject log = new JSONObject();
-                    log.put("agent", name);
-                    log.put("role", role);
-                    log.put("provider", "");
-                    log.put("text", "Agent error: " + safe(e));
-                    log.put("error", true);
-                    logs.put(log);
-                    mission.put("logs", logs);
-                    saveMission(missions, mission);
-                } catch (Exception ignored) {}
-            }
+            } catch (Exception ignored) {}
         }
-
-        try {
-            mission.put("current", "");
-            mission.put("status", "COMPLETED");
-            saveMission(missions, mission);
-        } catch (Exception ignored) {}
         return Result.success();
     }
 
@@ -227,8 +232,8 @@ public class AgentMissionWorker extends Worker {
         try {
             connection = (HttpURLConnection) new URL(requestUrl).openConnection();
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(20000);
-            connection.setReadTimeout(80000);
+            connection.setConnectTimeout(12000);
+            connection.setReadTimeout(30000);
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             connection.setRequestProperty("Accept", "application/json");
             if (p.gemini) connection.setRequestProperty("x-goog-api-key", key);
