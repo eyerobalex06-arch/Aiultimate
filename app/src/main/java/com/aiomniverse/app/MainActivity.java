@@ -97,6 +97,18 @@ public class MainActivity extends Activity {
         hero.addView(subtitle, sp);
         page.addView(hero);
 
+        Button liveChat = new Button(this);
+        liveChat.setText("OPEN LIVE AI CHAT  ↗");
+        liveChat.setTextSize(13);
+        liveChat.setTextColor(white);
+        liveChat.setAllCaps(false);
+        liveChat.setTypeface(Typeface.DEFAULT_BOLD);
+        liveChat.setBackground(gradient(new int[]{Color.rgb(126, 87, 194), Color.rgb(91, 70, 164)}, 16));
+        LinearLayout.LayoutParams liveChatParams = new LinearLayout.LayoutParams(-1, dp(50));
+        liveChatParams.topMargin = dp(12);
+        liveChat.setOnClickListener(v -> startActivity(new Intent(this, AiChatActivity.class)));
+        page.addView(liveChat, liveChatParams);
+
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.setPadding(0, dp(14), 0, dp(18));
@@ -270,8 +282,7 @@ public class MainActivity extends Activity {
             .setTitle(m.name + "  •  " + m.maker)
             .setMessage("BEST AT\n" + m.description + "\n\nSKILL LABELS\n" + m.tags.replace(" ", "  •  ") + "\n\nMODALITY\n" + m.modality + "\n\nNOTES\n" + m.notes + "\n\nThis directory helps you choose a model. It does not claim this model is connected or running inside the app.")
             .setNeutralButton("TRY AI ONLINE", (d, w) -> {
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/chat"));
-                startActivity(intent);
+                startActivity(new Intent(this, AiChatActivity.class));
             })
             .setPositiveButton("GOT IT", (d, w) -> d.dismiss())
             .show();
