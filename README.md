@@ -7,10 +7,10 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 - [Latest installable APK](https://github.com/eyerobalex06-arch/Aiultimate/releases/tag/latest-build)
 - [Build status and logs](https://github.com/eyerobalex06-arch/Aiultimate/actions/workflows/android.yml)
 
-## What's new in v2
+## What's included
 
 - Native chat screen, rather than embedding only one hosted chat website
-- Auto-switch router: when a configured provider fails, is rate-limited, or is unavailable, the app tries another configured provider
+- Auto-switch router: when a configured provider fails, is rate-limited, or unavailable, the app tries another configured provider. This improves resilience but does not bypass quotas or guarantee a reply
 - OpenRouter's `openrouter/free` model router, which can choose from its currently available free models
 - Direct API connectors for Google Gemini, GroqCloud, and Cerebras
 - Provider setup links and editable model IDs
@@ -33,9 +33,9 @@ Official account/key pages:
 - GroqCloud: https://console.groq.com/keys
 - Cerebras: https://cloud.cerebras.ai/platform
 
-## Important limitations
+## Important limitations and cost safety
 
-- No app can honestly promise infinite cloud AI usage. Free services impose request/token quotas, account rules, capacity limits, and changing model availability. Auto-switching helps use other configured services when possible; it does not bypass provider limits.
+- This is a cloud-only app. No AI model runs locally on your phone, but chat requires internet access and sends prompts to a selected external provider.\n- No app can honestly promise infinite cloud AI usage. Free services impose request/token quotas, account rules, capacity limits, and changing model availability. Auto-switching helps use other configured services when possible; it does not bypass provider limits or guarantee that another provider will be available.
 - The OpenRouter free-model router currently offers access to multiple free models, but its request limits and model pool can change. Check the provider's current plan and terms.
 - Gemini, GroqCloud, and Cerebras need separate user-created API keys and each may limit use. You do not need to enter payment details unless the provider itself asks, and should not upgrade for this app.
 - Model IDs change over time. If a provider rejects its default model ID, update that provider's **Model ID** field to a currently available model from the provider's official model list.
