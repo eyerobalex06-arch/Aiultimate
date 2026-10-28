@@ -108,6 +108,15 @@ public class AiChatActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         buildUi();
+        if (getIntent().getBooleanExtra("open_key_setup", false)) {
+            // Start directly on a real provider so the key field is enabled immediately.
+            providerSpinner.setSelection(1);
+            new AlertDialog.Builder(this)
+                .setTitle("Add an API key")
+                .setMessage("Choose a provider from PROVIDER ROUTER, paste your key into the API key field, then tap SAVE KEY. Use GET FREE KEY to open that provider's official site. Your saved key is encrypted on this device.")
+                .setPositiveButton("GOT IT", (dialog, which) -> dialog.dismiss())
+                .show();
+        }
         addMessage("assistant", "Welcome to AI OMNIVERSE cloud chat. The app itself does not impose a daily message quota. Add multiple free-tier provider keys and Auto-switch will try other configured providers when one fails or is rate-limited. Real usage is still limited by each provider’s quotas, model access, account rules, and availability, which can change. This cannot guarantee uninterrupted or unlimited cloud usage. Your keys are encrypted on this device; messages are sent to the provider that answers.", "AI OMNIVERSE");
         updateConnectionStatus();
     }
