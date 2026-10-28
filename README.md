@@ -10,9 +10,10 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 ## What's included
 
 - Native chat screen, rather than embedding only one hosted chat website
+- AI Agent Group: create and customize role-based bots, run a shared group discussion where each agent can build on earlier replies, and queue missions using Android WorkManager so they can continue when the screen is closed (Android may defer background work)
 - No app-imposed daily message quota; Auto-switch tries other configured providers when a provider fails, is rate-limited, or unavailable. Actual use remains subject to every provider’s quotas, account rules, model access, and capacity
 - OpenRouter's `openrouter/free` model router, which can choose from its currently available free models
-- Direct API connectors for Google Gemini, GroqCloud, and Cerebras, with editable model IDs; Groq defaults to its current `openai/gpt-oss-120b` model rather than the retired Llama 3.3 default
+- Direct API connectors for Google Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM, with editable model IDs. Defaults are intended for current model catalogs but provider availability and free access can change.
 - Provider setup links and editable model IDs
 - API keys encrypted locally with Android Keystore-backed AES-GCM encryption
 - Provider credentials are not included in the app package; users supply their own keys
@@ -21,17 +22,26 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 
 ## Getting started
 
-1. Install AI OMNIVERSE on Android and open **OPEN MULTI-AI CHAT**.
+1. Install AI OMNIVERSE on Android and open **OPEN MULTI-AI CHAT** or **OPEN AI AGENT GROUP**.
 2. Select **OpenRouter Free Models**, then tap **GET FREE KEY** to create an OpenRouter API key.
 3. Return to the app, paste the key and press **SAVE KEY**. The app encrypts the key on this device.
 4. Send a message. The default OpenRouter model is `openrouter/free`, which selects from currently available free models.
-5. For more fallback options, repeat the process for Gemini, GroqCloud, and Cerebras. Then select **Auto-switch** so the app can try every configured provider if one fails.
+5. For additional fallback options, configure Gemini, GroqCloud, Cerebras, Mistral Free Mode, and NVIDIA NIM using each provider's official key page, then select **Auto-switch**. Only use free access unless you intentionally choose to pay.
 
 Official account/key pages:
 - OpenRouter: https://openrouter.ai/settings/keys
 - Google AI Studio: https://aistudio.google.com/apikey
 - GroqCloud: https://console.groq.com/keys
 - Cerebras: https://cloud.cerebras.ai/platform
+- Mistral: https://console.mistral.ai/api-keys/
+- NVIDIA NIM: https://build.nvidia.com/
+
+## AI Agent Group
+
+- Add up to 8 named agents with your own role instructions, such as researcher, builder, critic, and coordinator.
+- A mission runs agents in sequence. Each agent receives the original task and earlier group replies, making this a shared transcript rather than isolated parallel chats.
+- Missions are queued with network constraints and saved transcripts, so work can continue while the app is closed. Android may defer background execution, and provider rate limits can slow or stop a mission.
+- The app does not autonomously browse the web, control your device, or complete external actions. Agents generate text responses based on their prompts and provider capabilities.
 
 ## Important limitations and cost safety
 
