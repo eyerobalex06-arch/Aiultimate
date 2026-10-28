@@ -212,22 +212,27 @@ public class AgentWorkspaceActivity extends Activity {
                 .putString("last_mission_id", id)
                 .commit();
 
-            Data input = new Data.Builder()
-                .putString("mission_id", id)
-                .putString("prompt", prompt)
-                .putString("agents_json", agents.toString())
-                .build();
             Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build();
-            OneTimeWorkRequest work = new OneTimeWorkRequest.Builder(AgentMissionWorker.class)
-                .setInputData(input)
-                .setConstraints(constraints)
-                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-                .build();
-            WorkManager.getInstance(getApplicationContext())
-                .beginUniqueWork("ai_omniverse_agent_queue", ExistingWorkPolicy.APPEND, work)
-                .enqueue();
+            OneTimeWorkRequest[] requests = new OneTimeWorkRequest[agents.length()];
+            for (int i = 0; i < agents.length(); i++) {
+                Data input = new Data.Builder()
+                    .putString("mission_id", id)
+                    .putString("prompt", prompt)
+                    .putString("agents_json", agents.toString())
+                    .putInt("agent_index", i)
+                    .build();
+                requests[i] = new OneTimeWorkRequest.Builder(AgentMissionWorker.class)
+                    .setInputData(input)
+                    .setConstraints(constraints)
+                    .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                    .build();
+            }
+            androidx.work.WorkContinuation continuation = WorkManager.getInstance(getApplicationContext())
+                .beginUniqueWork("ai_omniverse_agent_queue", ExistingWorkPolicy.APPEND, requests[0]);
+            for (int i = 1; i < requests.length; i++) continuation = continuation.then(requests[i]);
+            continuation.enqueue();
 
             taskInput.setText("");
             lastRenderedMission = "";
