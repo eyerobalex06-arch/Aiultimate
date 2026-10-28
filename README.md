@@ -5,7 +5,7 @@ AI OMNIVERSE is an Android multi-provider AI chat app and model-family explorer.
 ## Download the APK
 
 - [Latest installable APK](https://github.com/eyerobalex06-arch/Aiultimate/releases/tag/latest-build)
-- [Build status and logs](https://github.com/eyerobalex-arch/Aiultimate/actions/workflows/android.yml)
+- [Build status and logs](https://github.com/eyerobalex06-arch/Aiultimate/actions/workflows/android.yml)
 
 ## What's new in v2
 
