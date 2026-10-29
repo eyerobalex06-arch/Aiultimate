@@ -122,6 +122,18 @@ public class AiChatActivity extends Activity {
     private Button sendButton;
     private int currentProviderIndex = 0;
     private boolean busy = false;
+    private final android.os.Handler responseStatusHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private volatile long providerAttemptStartedAt = 0L;
+    private volatile String activeProviderStatus = "provider";
+    private final Runnable responseStatusTicker = new Runnable() {
+        @Override public void run() {
+            if (!busy || connectionStatus == null) return;
+            long seconds = Math.max(0L, (System.currentTimeMillis() - providerAttemptStartedAt) / 1000L);
+            connectionStatus.setText("● Request active · " + activeProviderStatus + " · Waiting for reply (" + seconds + "s)");
+            connectionStatus.setTextColor(Color.rgb(164, 220, 198));
+            responseStatusHandler.postDelayed(this, 1000L);
+        }
+    };
     private boolean webSearchEnabled = false;
     private final List<ChatMessage> history = new ArrayList<>();
     private final List<SavedChat> savedChats = new ArrayList<>();
@@ -1694,8 +1706,20 @@ public class AiChatActivity extends Activity {
                         String model = getPreferences(MODEL_KEY_PREFIX + p.id, p.defaultModel);
                         String key = decryptKey(getSavedKeyForModel(p, model));
                         if (key.trim().isEmpty()) continue;
+                        providerAttemptStartedAt = System.currentTimeMillis();
+                        activeProviderStatus = p.label + " · " + model;
+                        runOnUiThread(() -> {
+                            responseStatusHandler.removeCallbacks(responseStatusTicker);
+                            if (connectionStatus != null) {
+                                connectionStatus.setText("● Sent to " + activeProviderStatus + " · Waiting for first complete reply…");
+                                connectionStatus.setTextColor(Color.rgb(164, 220, 198));
+                            }
+                            responseStatusHandler.postDelayed(responseStatusTicker, 1000L);
+                        });
                         answer = requestProvider(p, key, model, history);
-                        source = p.label + " · " + model;
+                        long elapsedSeconds = Math.max(0L, (System.currentTimeMillis() - providerAttemptStartedAt) / 1000L);
+                        source = p.label + " · " + model + " · " + elapsedSeconds + "s";
+                        responseStatusHandler.removeCallbacks(responseStatusTicker);
                         break;
                     } catch (Exception e) {
                         String message = safeError(e);
@@ -1715,8 +1739,16 @@ public class AiChatActivity extends Activity {
                         "\n\nTry another free provider or check its dashboard for quota/service status.";
                     addMessage("assistant", errorText, "ROUTER");
                 }
+                responseStatusHandler.removeCallbacks(responseStatusTicker);
                 setBusy(false);
                 updateConnectionStatus();
+                if (connectionStatus != null && finalAnswer != null && !finalAnswer.trim().isEmpty()) {
+                    connectionStatus.setText("✓ Reply received · " + finalSource);
+                    connectionStatus.setTextColor(Color.rgb(137, 218, 190));
+                } else if (connectionStatus != null) {
+                    connectionStatus.setText("⚠ No provider returned a complete reply. See the diagnostic message above.");
+                    connectionStatus.setTextColor(Color.rgb(255, 174, 114));
+                }
             });
         }).start();
     }
@@ -1786,8 +1818,8 @@ public class AiChatActivity extends Activity {
         try {
             connection = (HttpURLConnection) new URL(requestUrl).openConnection();
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(20000);
-            connection.setReadTimeout(70000);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(45000);
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             connection.setRequestProperty("Accept", "application/json");
             if (p.gemini) connection.setRequestProperty("x-goog-api-key", key);
@@ -1894,10 +1926,16 @@ public class AiChatActivity extends Activity {
 
     private void setBusy(boolean value) {
         busy = value;
+        if (!value) responseStatusHandler.removeCallbacks(responseStatusTicker);
         sendButton.setEnabled(!value);
         sendButton.setText(value ? "…" : "↑");
         messageInput.setEnabled(!value);
-        if (value) connectionStatus.setText("Trying configured cloud providers. Free quotas and availability apply...");
+        if (value) {
+            providerAttemptStartedAt = System.currentTimeMillis();
+            activeProviderStatus = "configured providers";
+            connectionStatus.setText("● Request queued · Preparing connected providers…");
+            connectionStatus.setTextColor(Color.rgb(164, 220, 198));
+        }
     }
 
     private void addMessage(String role, String body, String source) {
