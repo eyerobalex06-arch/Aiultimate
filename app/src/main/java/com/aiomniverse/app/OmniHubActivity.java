@@ -107,9 +107,9 @@ public class OmniHubActivity extends Activity {
             fileCard.addView(text("ATTACHED FILE", 10, green, true));
             fileCard.addView(text(attachedName, 14, white, true), top(7));
             fileCard.addView(text(attachedText.length() + " characters loaded locally. Nothing has been uploaded yet.", 11, muted, false), top(4));
-            Button copy = button("COPY FILE TEXT", green);
-            fileCard.addView(copy, top(10));
-            copy.setOnClickListener(v -> {
+            Button copyFileButton = button("COPY FILE TEXT", green);
+            fileCard.addView(copyFileButton, top(10));
+            copyFileButton.setOnClickListener(v -> {
                 ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                 cm.setPrimaryClip(ClipData.newPlainText(attachedName, attachedText));
                 Toast.makeText(this, "File text copied. Open Multi-AI Chat and paste it into your message.", Toast.LENGTH_LONG).show();
