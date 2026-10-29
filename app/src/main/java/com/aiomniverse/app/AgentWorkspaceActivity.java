@@ -99,8 +99,8 @@ public class AgentWorkspaceActivity extends Activity {
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
         titleBox.setPadding(dp(10), 0, 0, 0);
-        titleBox.addView(text("AI AGENT GROUP", 15, WHITE, true));
-        titleBox.addView(text("SHARED CHAT · BACKGROUND MISSIONS", 9, PURPLE, true));
+        titleBox.addView(text("OMNIBOT", 15, WHITE, true));
+        titleBox.addView(text("MULTI-AI TEAM ROOM · LIVE MISSION LOG", 9, PURPLE, true));
         toolbar.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
         root.addView(toolbar);
 
@@ -111,12 +111,12 @@ public class AgentWorkspaceActivity extends Activity {
 
         LinearLayout hero = card();
         hero.setBackground(gradient(new int[]{Color.rgb(43, 38, 82), Color.rgb(22, 42, 61)}, 20));
-        hero.addView(text("GIVE THE TEAM A TASK.", 10, Color.rgb(196, 181, 253), true));
-        TextView heroTitle = text("Multiple AIs. One shared mission.", 22, WHITE, true);
+        hero.addView(text("OMNIBOT · MULTI-AGENT WORKSPACE", 10, Color.rgb(196, 181, 253), true));
+        TextView heroTitle = text("Build with a team of AIs.", 22, WHITE, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.topMargin = dp(7);
         hero.addView(heroTitle, titleParams);
-        TextView heroCopy = text("Agents reply in sequence and can build on each other's messages. Mention @Scout, @Builder, @Skeptic, or @Coordinator to call specific bots; without a matching @mention, everyone joins. Queue a mission, leave the app, and check the transcript later. Android may defer background work and free quotas still apply.", 12, Color.rgb(215, 222, 240), false);
+        TextView heroCopy = text("Choose which agents work on your task. Their replies are recorded in a mission log so you can tell which bot actually returned a result. Work runs in sequence, not simultaneously; Android may defer background work and free quotas still apply.", 12, Color.rgb(215, 222, 240), false);
         LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(-1, -2);
         copyParams.topMargin = dp(8);
         hero.addView(heroCopy, copyParams);
